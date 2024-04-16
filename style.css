@@ -11,6 +11,58 @@ header {
     text-align: center;
 }
 
+/* Existing styles */
+
+/* New styles for dropdown */
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #f9f9f9;
+    color: black;
+    min-width: 160px;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+    padding: 12px 16px;
+    z-index: 1;
+}
+/* Additions to existing CSS */
+.dropdown-content div {
+    padding: 5px;
+}
+
+.dropbtn:hover .dropdown-content {
+    display: block;
+}
+
+.dropbtn:focus + .dropdown-content {
+    display: block;
+}
+
+.dropdown-content input[type="checkbox"] {
+    margin: 10px;
+}
+
+.dropdown-content button {
+    margin: 5px;
+    padding: 5px;
+}
+
+/* Update styles for dropdown content labels */
+#node-dropdown label {
+    color: black; /* This sets the text color to black */
+    margin-left: 8px; /* Optional: adds some space between the checkbox and the label */
+}
+
+/* Style for the checkboxes for a cleaner look */
+#node-dropdown input[type="checkbox"] {
+    accent-color: #333; /* This changes the checkbox color */
+}
+
+
 #vis-container {
     display: flex;
     flex-wrap: wrap;
@@ -25,6 +77,7 @@ header {
     width: 45%;
     text-align: center;
     background-color: #f9f9f9;
+    overflow: hidden; /* Prevents the canvas from overflowing */
 }
 
 @media (max-width: 600px) {
@@ -32,3 +85,11 @@ header {
         width: 100%;
     }
 }
+
+#visualization1 {
+    width: 100%;       /* Full width of its container */
+    height: 500px;     /* Fixed height */
+    border: 1px solid #ccc; /* Optional: adds a border for visibility */
+    /* Add any additional styling you need */
+  }
+  

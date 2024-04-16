@@ -8,11 +8,27 @@
 </head>
 <body>
     <header>
+        <!-- Dataset Selector -->
         <select id="dataset-selector">
             <option value="">Select a Dataset</option>
-            <!-- Options for datasets will be added here -->
+            <option value="WT_BS">Bacillus Subtilis Wild Type</option>
+            <!-- More datasets can be added here -->
         </select>
-        <!-- Additional options can be added here later -->
+
+    <!-- Node Selection -->
+    <div id="node-selection" class="dropdown">
+        <button id="node-select-btn" class="dropbtn">Select Nodes</button>
+        <div id="node-dropdown" class="dropdown-content">
+            <div>
+                <input type="checkbox" id="select-all-nodes" /><label for="select-all-nodes">Select All</label>
+            </div>
+            <div id="node-checkboxes">
+                <!-- Node checkboxes will be dynamically inserted here -->
+            </div>
+            <button id="clear-nodes">Clear</button>
+            <button id="visualize-nodes">Visualize</button>
+        </div>
+    </div>
     </header>
     <main>
         <div id="vis-container">
@@ -22,6 +38,9 @@
             <div id="visualization4" class="visualization">Visualization 4 Placeholder</div>
         </div>
     </main>
-    <script src="script.js"></script>
+
+    <!-- Your script file -->
+    <script type="module" src="script.js"></script>
+
 </body>
 </html>
