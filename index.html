@@ -16,19 +16,25 @@
         </select>
 
     <!-- Node Selection -->
+<!-- Node Selection -->
     <div id="node-selection" class="dropdown">
-        <button id="node-select-btn" class="dropbtn">Select Nodes</button>
+        <button id="node-select-btn" class="dropbtn" type="button">Select Nodes</button>
         <div id="node-dropdown" class="dropdown-content">
             <div>
-                <input type="checkbox" id="select-all-nodes" /><label for="select-all-nodes">Select All</label>
+                <!-- Corrected ID for Select All functionality -->
+                <input type="checkbox" id="select-all-nodes" />
+                <label for="select-all-nodes">Select All</label>
             </div>
             <div id="node-checkboxes">
                 <!-- Node checkboxes will be dynamically inserted here -->
             </div>
-            <button id="clear-nodes">Clear</button>
-            <button id="visualize-nodes">Visualize</button>
+            <!-- Corrected ID for Clear functionality -->
+            <button id="clear-nodes-button" type="button">Clear</button>
+            <!-- Corrected ID for Visualize functionality -->
+            <button id="visualize-nodes" type="button">Visualize</button>
         </div>
     </div>
+
     </header>
     <main>
         <div id="vis-container">
@@ -40,6 +46,7 @@
     </main>
 
     <!-- Your script file -->
+    <script src="https://d3js.org/d3.v6.min.js"></script>
     <script type="module" src="script.js"></script>
 
 </body>

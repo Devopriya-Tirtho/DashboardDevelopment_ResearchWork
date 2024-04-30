@@ -92,4 +92,9 @@ header {
     border: 1px solid #ccc; /* Optional: adds a border for visibility */
     /* Add any additional styling you need */
   }
+
+  #visualization3 {
+    width: 50%; /* or a specific pixel value */
+    height: 650px; /* or a value that suits your layout */
+  }
   
