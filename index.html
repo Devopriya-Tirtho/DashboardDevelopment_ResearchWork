@@ -35,6 +35,11 @@
         </div>
     </div>
 
+    <label for="edgeWeightSlider">Adjust Edge Visibility:</label>
+    <input type="range" id="edgeWeightSlider" name="edgeWeightSlider" min="0" max="100" value="50" oninput="updateEdgeVisibility(this.value)">
+    <span id="edgeWeightValue">50%</span>
+
+
     </header>
     <main>
         <div id="vis-container">

@@ -4,6 +4,10 @@ import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.124/examples/js
 import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.124/examples/jsm/loaders/RGBELoader.js'; 
 import { RoughnessMipmapper } from 'https://cdn.jsdelivr.net/npm/three@0.124/examples/jsm/utils/RoughnessMipmapper.js';
 
+// Defining these globally
+var scene, camera, renderer, controls;
+// Define nodePositions globally
+var nodePositions = {};
 // This function sets up listeners to manage the dropdown behavior
 function setupDropdownToggle() {
     const dropBtn = document.getElementById('node-select-btn');
@@ -43,19 +47,20 @@ function addDynamicEventListeners() {
 
     // Visualize button functionality
     document.getElementById('visualize-nodes').addEventListener('click', function() {
-        const selectedNodes = Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked'))
-                                    .map(checkbox => checkbox.dataset.nodeName);
+        const selectedNodeIds = Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked'))
+                                     .map(checkbox => checkbox.dataset.nodeId);
         const selectedDataset = document.getElementById('dataset-selector').value;
         const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed.json' : 'Other_Dataset_Edge.json';
     
-        fetchAndFilterEdgeData(edgeDataPath, selectedNodes).then(filteredEdges => {
+        fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, function(filteredEdges) {
             createEdges3D(filteredEdges);  // Draw 3D edges
             const context = document.getElementById('canvas2D').getContext('2d');
-            drawEdges2D(filteredEdges, context);  // Draw 2D edges
-        }).catch(error => {
-            console.error("Error processing edge data:", error);
+            console.log("Available node positions before drawing 2D edges:", nodePositions);
+            drawEdges2D(filteredEdges, context);
         });
     });
+    
+    
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -64,30 +69,26 @@ document.addEventListener('DOMContentLoaded', function() {
     //////////////////////////////////////////////////////////////////////////////////
     ////////////            3D Visualization Setup      /////////////////////////////
     // Setup Three.js scene, camera, renderer, and controls
-    var scene = new THREE.Scene();
-    // Adjust renderer size to match the visualization container
+    scene = new THREE.Scene();
+
     const visualizationContainer = document.getElementById('visualization1');
-    var renderer = new THREE.WebGLRenderer({ antialias: true });
-    // Inside your resize event and DOMContentLoaded
+    renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(visualizationContainer.clientWidth, visualizationContainer.clientHeight);
     visualizationContainer.appendChild(renderer.domElement);
-    // Adjust the camera setup to ensure it's correctly positioned
-    // Setup camera with initial position
-    var camera = new THREE.PerspectiveCamera(45, visualizationContainer.clientWidth / visualizationContainer.clientHeight, 0.1, 1000);
-    camera.position.set(0, 0, 50); // Closer to the origin
-    // After setting the camera position
-    camera.lookAt(new THREE.Vector3(0, 0, 0)); // Adjust if your nodes are centered elsewhere
-    camera.near = 0.1;
-    camera.far = 1000;
+
+    camera = new THREE.PerspectiveCamera(45, visualizationContainer.clientWidth / visualizationContainer.clientHeight, 0.1, 1000);
+    camera.position.set(0, 0, 50);
+    camera.lookAt(new THREE.Vector3(0, 0, 0));
     camera.updateProjectionMatrix();
-    // Add ambient light to the scene
+
     var ambientLight = new THREE.AmbientLight(0xaaaaaa);
     scene.add(ambientLight);
-    // Add point light to the scene
+
     var light = new THREE.PointLight(0xffffff, 1);
     light.position.set(50, 50, 50);
-    scene.add(light); // Make sure to add the light to the scene
-    var controls = new OrbitControls(camera,  renderer.domElement);
+    scene.add(light);
+
+    controls = new OrbitControls(camera, renderer.domElement);
 //////////////////////////////////////////////////////////////////////////////////////
 function getColorForChID(chID) {
     // Simple hash function to get a color
@@ -112,23 +113,35 @@ canvas2D.height = 500; // Set a fixed height or make it responsive
 canvas2D.id = 'canvas2D'; // Assign an ID to the canvas for easy reference
 vis2Container.appendChild(canvas2D);
 
+
+
 function draw2DVisualization(data) {
     const canvas = document.getElementById('canvas2D');
+    if (!canvas) {
+        console.error("Canvas element not found!");
+        return;
+    }
     const context = canvas.getContext('2d');
-    const scaleX = canvas.width / (getRange(data, 'x') + 1); // Add 1 to avoid division by zero
+    const scaleX = canvas.width / (getRange(data, 'x') + 1);
     const scaleY = canvas.height / (getRange(data, 'y') + 1);
-    
+
     context.clearRect(0, 0, canvas.width, canvas.height);
-    
+    nodePositions = {}; // Reset positions map each time nodes are drawn
+
     data.forEach(node => {
+        const numericId = node.id.replace(/[^\d]/g, '');
         const x = (node.x - getMin(data, 'x')) * scaleX;
         const y = (node.y - getMin(data, 'y')) * scaleY;
+
+        nodePositions[numericId] = { x, y };
+
         context.beginPath();
-        context.arc(x, y, 10, 0, Math.PI * 2, true); // Increase radius to make nodes larger
+        context.arc(x, y, 10, 0, Math.PI * 2, true);
         context.fillStyle = getColorForChID(String(node.ChID));
         context.fill();
     });
 }
+
 
 // Helper functions to get the range and minimum value of nodes
 function getRange(data, coord) {
@@ -332,37 +345,26 @@ function getMin(data, coord) {
 
       
     
-    // Function to create nodes based on loaded data
-    function createNodes(nodeData) {
-
-        // Clear the scene
-        while(scene.children.length > 0){ 
-            scene.remove(scene.children[0]); 
-        }
-
-        // Define a generic material for all nodes, you can customize this later
-        //const nodeMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-        const scale = 100; // Adjust scale as necessary
-
-        nodeData.forEach(node => {
-            // In createNodes function
-            const color = getColorForChID(String(node.ChID)); // Get color based on ChID
-            const nodeMaterial = new THREE.MeshBasicMaterial({ color: color });
-            const scale = 0.1; // Scale factor if your nodes are too spread out
-            const geometry = new THREE.SphereGeometry(1, 32, 32); // Adjust the size as needed
-            const sphere = new THREE.Mesh(geometry, nodeMaterial);
-            sphere.position.set(node.x * scale, node.y * scale, node.z * scale);
-            sphere.name = node.id;
-            scene.add(sphere);
-        });
-
-        console.log(scene.children); // Log out the scene's children to ensure nodes are present
-
-
-        // Update controls and re-render the scene
-        controls.update();
-        renderer.render(scene, camera);
+function createNodes(nodeData) {
+    while(scene.children.length > 0) { 
+        scene.remove(scene.children[0]); 
     }
+
+    nodeData.forEach(node => {
+        const numericId = node.id.replace(/[^\d]/g, ''); // Assumes node.id is like 'Node1'
+        const color = getColorForChID(String(node.ChID));
+        const nodeMaterial = new THREE.MeshBasicMaterial({ color: color });
+        const geometry = new THREE.SphereGeometry(1, 32, 32);
+        const sphere = new THREE.Mesh(geometry, nodeMaterial);
+        sphere.position.set(node.x * 0.1, node.y * 0.1, node.z * 0.1);
+        sphere.name = numericId;
+        scene.add(sphere);
+    });
+
+    renderer.render(scene, camera);
+}
+
+
 
     // Detect clicks on the canvas and check if a node was clicked
     renderer.domElement.addEventListener('click', onCanvasClick, false);
@@ -400,106 +402,128 @@ function getMin(data, coord) {
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.id = `node${index}`;
-            checkbox.dataset.nodeName = node.id; // Store node ID in data attribute
+    
+            // Extract only the numeric part of the node ID
+            const numericId = node.id.replace(/^\D+/g, ''); // Removes non-digit characters at the start
+            checkbox.dataset.nodeId = numericId; // Store only the numeric ID in data attribute
     
             const label = document.createElement('label');
             label.htmlFor = `node${index}`;
-            label.textContent = node.id; // This is where you set the node ID as the label text
+            label.textContent = node.id; // Display the original node ID as the label text
     
             checkboxContainer.appendChild(checkbox);
             checkboxContainer.appendChild(label);
             nodeCheckboxesContainer.appendChild(checkboxContainer);
         });
     }
+    
 
 
     
         // Initially call to setup listeners for static elements
        // addDynamicEventListeners();
 
-///////////////////////////////////
+    addDynamicEventListeners();  // Initialize all event listeners
+    setupDropdownToggle();       // Setup dropdown toggle behavior if defined
+
+    //End of DomContentLoaded
+    });
+
+
+//////////////Out of DOM CONTENT LOADED/////////////////////
 //Function for filtering edged////
 function filterTopWeightedEdges(edges, selectedNodeIds) {
     let nodeEdgeMap = new Map();
 
-    // Filter edges to include only those connected to selected nodes
+    // Gather edges connected to the selected nodes
     edges.forEach(edge => {
-        if (selectedNodeIds.includes(edge.Source) || selectedNodeIds.includes(edge.Target)) {
-            if (!nodeEdgeMap.has(edge.Source)) {
-                nodeEdgeMap.set(edge.Source, []);
+        let sourceId = String(edge.Source);
+        let targetId = String(edge.Target);
+        if (selectedNodeIds.includes(sourceId) || selectedNodeIds.includes(targetId)) {
+            if (!nodeEdgeMap.has(sourceId)) {
+                nodeEdgeMap.set(sourceId, []);
             }
-            if (!nodeEdgeMap.has(edge.Target)) {
-                nodeEdgeMap.set(edge.Target, []);
+            if (!nodeEdgeMap.has(targetId)) {
+                nodeEdgeMap.set(targetId, []);
             }
-            nodeEdgeMap.get(edge.Source).push(edge);
-            nodeEdgeMap.get(edge.Target).push(edge);
+            nodeEdgeMap.get(sourceId).push(edge);
+            nodeEdgeMap.get(targetId).push(edge);
         }
     });
 
-    // Now refine each node's edges to include only the top 5%
     let topEdges = [];
+    // Apply the top 5% filter uniformly
     nodeEdgeMap.forEach((edges, nodeId) => {
-        edges.sort((a, b) => b.Weight - a.Weight); // Sort edges by weight in descending order
-        let top5PercentCount = Math.ceil(edges.length * 0.05); // Calculate top 5% of edges
-        topEdges.push(...edges.slice(0, top5PercentCount)); // Add top 5% edges to the final list
+        edges.sort((a, b) => b.Weight - a.Weight); // Sort by weight
+        let top5PercentCount = Math.max(1, Math.ceil(edges.length * 0.05)); // Ensure at least one edge is selected
+        topEdges.push(...new Set(edges.slice(0, top5PercentCount))); // Select top edges, ensure uniqueness here
     });
 
-    // Remove duplicates before returning
+    // Return unique edges
     return Array.from(new Set(topEdges));
 }
+
+
 
 ///////////////////////////////////
 //Function for Handling Filtered edges////
 
-    function fetchAndFilterEdgeData(filePath, selectedNodeIds) {
+    function fetchAndFilterEdgeData(filePath, selectedNodeIds, callback) {
         d3.json(filePath).then(rawData => {
             const filteredEdges = filterTopWeightedEdges(rawData, selectedNodeIds);
-            update3DVisualizationWithEdges(filteredEdges); // Update your 3D visualization
-            // Add any other visualization updates here
+            callback(filteredEdges);  // Execute the callback with filtered edges
         }).catch(error => {
             console.error("Error fetching and filtering edge data:", error);
         });
     }
+
     
 ///////////////////////////////////
 //Function for draw edges of selected nodes for 3d vis////
-    function createEdges3D(edgeData) {
-        // Assuming edgeData is an array of edges with properties Source, Target, and Weight
-        const lineMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff });
-        edgeData.forEach(edge => {
-            const sourceNode = scene.getObjectByName(edge.Source);
-            const targetNode = scene.getObjectByName(edge.Target);
-    
-            if (sourceNode && targetNode) {
-                const points = [];
-                points.push(sourceNode.position);
-                points.push(targetNode.position);
-    
-                const geometry = new THREE.BufferGeometry().setFromPoints(points);
-                const line = new THREE.Line(geometry, lineMaterial);
-                scene.add(line);
-            }
-        });
-    }
+function createEdges3D(edgeData) {
+    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff });
+
+    edgeData.forEach(edge => {
+        const sourceNode = scene.getObjectByName(String(edge.Source));
+        const targetNode = scene.getObjectByName(String(edge.Target));
+
+        if (sourceNode && targetNode) {
+            const points = [sourceNode.position.clone(), targetNode.position.clone()];
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const line = new THREE.Line(geometry, lineMaterial);
+            scene.add(line);
+            console.log(`Drawing edge between ${edge.Source} and ${edge.Target}`);
+        } else {
+            // Log failure to retrieve nodes
+            console.log(`Failed to find nodes for edge between ${edge.Source} and ${edge.Target}`);
+        }
+    });
+
+    renderer.render(scene, camera);
+}
+
+
     
 ///////////////////////////////////
 //Function for draw edges of selected nodes for 2d vis////
 
-    function drawEdges2D(edgeData, context) {
-        context.strokeStyle = '#0000ff';  // Edge color
-        edgeData.forEach(edge => {
-            const sourceNode = document.getElementById(`node2D-${edge.Source}`);
-            const targetNode = document.getElementById(`node2D-${edge.Target}`);
-    
-            if (sourceNode && targetNode) {
-                context.beginPath();
-                context.moveTo(sourceNode.cx.baseVal.value, sourceNode.cy.baseVal.value);
-                context.lineTo(targetNode.cx.baseVal.value, targetNode.cy.baseVal.value);
-                context.stroke();
-            }
-        });
-    }
-    addDynamicEventListeners();  // Initialize all event listeners
-    setupDropdownToggle();       // Setup dropdown toggle behavior if defined
+function drawEdges2D(edgeData, context) {
+    console.log("Drawing edges in 2D for edge data:", edgeData);
+
+    context.strokeStyle = '#0000ff';  // Set edge color
+    edgeData.forEach(edge => {
+        const sourceNode = nodePositions[edge.Source];
+        const targetNode = nodePositions[edge.Target];
+
+        if (sourceNode && targetNode) {
+            context.beginPath();
+            context.moveTo(sourceNode.x, sourceNode.y);
+            context.lineTo(targetNode.x, targetNode.y);
+            context.stroke();
+            console.log(`Edge drawn from ${edge.Source} to ${edge.Target}`);
+        } else {
+            console.log(`Nodes not found for edge from ${edge.Source} to ${edge.Target}`);
+        }
     });
+}
 
