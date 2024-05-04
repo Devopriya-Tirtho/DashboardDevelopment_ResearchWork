@@ -58,6 +58,7 @@ function addDynamicEventListeners() {
             console.log("Available node positions before drawing 2D edges:", nodePositions);
             drawEdges2D(filteredEdges, context);
         });
+        
     });
     
     
@@ -65,7 +66,9 @@ function addDynamicEventListeners() {
 
 document.addEventListener('DOMContentLoaded', function() {
 
+    //////////////////////////////////////////////////////////////////////////////////
 
+    //////////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////
     ////////////            3D Visualization Setup      /////////////////////////////
     // Setup Three.js scene, camera, renderer, and controls
@@ -182,20 +185,23 @@ function getMin(data, coord) {
     animate();
 //////////////////////////////////////////////////////////////////////////////////////
 
-    // Existing dataset selection code (unchanged)
     const datasetSelector = document.getElementById('dataset-selector');
     datasetSelector.addEventListener('change', function() {
         const selectedDataset = datasetSelector.value;
-        if (selectedDataset === 'WT_BS') {
-            // Clear the existing scene, then load and visualize new node data
-            while(scene.children.length > 0){ 
-                scene.remove(scene.children[0]); 
-            }
-            //console.log("Flag");
-            fetchNodesFromJson('WT_BS_Node_3D.json');
-            fetchProcessedEdgeData('WT_BS_Edge_processed.json');
+        switch (selectedDataset) {
+            case 'WT_BS':
+                clearVisualizationScenes(); // Clears all scenes
+                fetchNodesFromJson('WT_BS_Node_3D.json'); // Specific for 3D visualizations
+                fetchProcessedEdgeData('WT_BS_Edge_processed.json');
+                setupParallelPlotData('WT_BS_Edge_processed.json'); // Parallel plot specific data
+                break;
+            //case 'Other_Dataset': // Example of another dataset
+                //clearVisualizationScenes();
+                //fetchNodesFromJson('Other_Dataset_Node_3D.json');
+                //setupParallelPlotData('Other_Dataset_Edge_processed.json');
+                //break;
+            // Add more cases as needed
         }
-        // ... any other dataset conditions
     });
 
     function fetchNodesFromJson(filePath) {
@@ -216,6 +222,7 @@ function getMin(data, coord) {
                 //console.log("Data loaded:", data);
                 createNodes(data); // For 3D visualization
                 draw2DVisualization(data); // For 2D visualization
+                //drawParallelPlot(data);    // New function for parallel plot visualization
             })
             .catch(error => {
                 console.error("Error fetching nodes:", error);
@@ -261,7 +268,9 @@ function getMin(data, coord) {
           console.error("Error fetching processed edge data:", error);
         });
       }
-      
+
+    //////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////  
 
       function createHeatmap(data) {
         // Select the visualization container and set up dimensions
@@ -527,3 +536,112 @@ function drawEdges2D(edgeData, context) {
     });
 }
 
+///////////////
+    ///////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
+
+        // Define dimensions globally within the DOMContentLoaded's scope- For Parallel Plot
+
+        ////////////////////////
+////////////////////////
+/////////////////////////////////////////////////////////
+///For Parallel Plots///
+// Function to setup and fetch data for the parallel plot
+function setupParallelPlotData(filePath) {
+    fetch(filePath)
+        .then(response => response.json())
+        .then(data => {
+            // Log initial data for debugging
+            console.log("Original data length:", data.length);
+            console.log("Max weight in original data:", Math.max(...data.map(d => d.Weight)));
+
+            // Sort data by weight in descending order and get the top 10% of edges
+            data.sort((a, b) => b.Weight - a.Weight);
+            const top10PercentCount = Math.ceil(data.length * 0.01);
+            const topEdges = data.slice(0, top10PercentCount);
+
+            // Log filtered data for debugging
+            console.log("Filtered top edges length:", topEdges.length);
+            console.log("Weight range in top edges:", topEdges.map(d => d.Weight));
+
+// Assuming setupSVGandAxes returns { svg, sourceScale, targetScale }
+
+        const { svg, sourceScale, targetScale, width, height } = setupSVGandAxes(data);
+        drawLinks({ svg, sourceScale, targetScale, data, width });
+
+        })
+        .catch(error => console.error("Error fetching parallel plot data:", error));
+}
+
+function setupSVGandAxes(data) {
+    const margin = { top: 30, right: 30, bottom: 30, left: 30 },
+         totalWidth = 960,
+         totalHeight = 500,
+         width = totalWidth - margin.left - margin.right,
+         height = totalHeight - margin.top - margin.bottom;
+
+    const svg = d3.select("#visualization4").append("svg")
+        .attr("width", totalWidth)
+        .attr("height", totalHeight)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const sourceScale = d3.scalePoint()
+        .domain([...new Set(data.map(d => d.Source))].sort((a, b) => a - b))
+        .range([0, height]);
+
+    const targetScale = d3.scalePoint()
+        .domain([...new Set(data.map(d => d.Target))].sort((a, b) => a - b))
+        .range([0, height]);
+
+    svg.append("g")
+        .attr("transform", "translate(0,0)")
+        .call(d3.axisLeft(sourceScale));
+
+    svg.append("g")
+        .attr("transform", `translate(${width},0)`)
+        .call(d3.axisRight(targetScale));
+    
+    console.log("SVG Setup width:", svg.attr("totalWidth"));
+    return { svg, sourceScale, targetScale, width, height };
+}
+
+
+function drawLinks({ svg, sourceScale, targetScale, data, width }) {
+    svg.selectAll("path").remove();
+    
+    console.log("SVG width:", svg.attr("width"));  // Check if width is properly set
+    console.log("Calculated width:", width);  // Output the calculated width used in path generation
+
+
+    const colorScale = d3.scaleOrdinal(d3.schemeCategory10)
+        .domain([...new Set(data.map(d => d.Source))]);
+
+    svg.selectAll("path")
+       .data(data)
+       .enter()
+       .append("path")
+       .attr("d", d => {
+           const sourceY = sourceScale(d.Source);
+           const targetY = targetScale(d.Target);
+           return `M0,${sourceY} L${width},${targetY}`;  // Use width here
+       })
+       .attr("stroke", d => colorScale(d.Source))
+       .attr("stroke-width", 2)
+       .attr("opacity", 0.7)
+       .attr("fill", "none");
+}
+
+
+
+
+
+
+function clearVisualizationScenes() {
+    while(scene.children.length > 0) { 
+        scene.remove(scene.children[0]); 
+    }
+}
+///////////////
+    ////////////////////////////////////////////////////////////
