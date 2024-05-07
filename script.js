@@ -548,33 +548,37 @@ function drawEdges2D(edgeData, context) {
 /////////////////////////////////////////////////////////
 ///For Parallel Plots///
 // Function to setup and fetch data for the parallel plot
+
 function setupParallelPlotData(filePath) {
     fetch(filePath)
         .then(response => response.json())
         .then(data => {
-            // Log initial data for debugging
             console.log("Original data length:", data.length);
             console.log("Max weight in original data:", Math.max(...data.map(d => d.Weight)));
 
-            // Sort data by weight in descending order and get the top 10% of edges
+            // Sort data by weight in descending order and get the top 10 links
             data.sort((a, b) => b.Weight - a.Weight);
-            const top10PercentCount = Math.ceil(data.length * 0.01);
-            const topEdges = data.slice(0, top10PercentCount);
+            const topEdges = data.slice(0, 10);
+            //const top10PercentCount = Math.ceil(data.length * 0.01);
+            //const topEdges = data.slice(0, top10PercentCount);
 
-            // Log filtered data for debugging
             console.log("Filtered top edges length:", topEdges.length);
             console.log("Weight range in top edges:", topEdges.map(d => d.Weight));
 
-// Assuming setupSVGandAxes returns { svg, sourceScale, targetScale }
-
-        const { svg, sourceScale, targetScale, width, height } = setupSVGandAxes(data);
-        drawLinks({ svg, sourceScale, targetScale, data, width });
-
+            // Assuming setupSVGandAxes returns { svg, sourceScale, targetScale }
+            const allNodes = {
+                sources: [...new Set(data.map(d => d.Source))].sort((a, b) => a - b),
+                targets: [...new Set(data.map(d => d.Target))].sort((a, b) => a - b)
+            };
+            
+            const { svg, sourceScale, targetScale, width, height } = setupSVGandAxes(allNodes, topEdges);  // Pass filtered data for SVG setup
+            drawLinks({ svg, sourceScale, targetScale, data: topEdges, width });  // Ensure to pass filtered data for drawing
         })
         .catch(error => console.error("Error fetching parallel plot data:", error));
 }
 
-function setupSVGandAxes(data) {
+
+function setupSVGandAxes(allNodes, data) {
     const margin = { top: 30, right: 30, bottom: 30, left: 30 },
          totalWidth = 960,
          totalHeight = 500,
@@ -587,21 +591,36 @@ function setupSVGandAxes(data) {
         .append("g")
         .attr("transform", `translate(${margin.left},${margin.top})`);
 
+    // Use all available nodes for source and target to maintain complete axes
+    const sourceIds = allNodes.sources;
+    const targetIds = allNodes.targets;
+
+    // const sourceScale = d3.scalePoint()
+    //     .domain([...new Set(data.map(d => d.Source))].sort((a, b) => a - b))
+    //     .range([0, height]);
+
+    // const targetScale = d3.scalePoint()
+    //     .domain([...new Set(data.map(d => d.Target))].sort((a, b) => a - b))
+    //     .range([0, height]);
+
     const sourceScale = d3.scalePoint()
-        .domain([...new Set(data.map(d => d.Source))].sort((a, b) => a - b))
+        .domain(sourceIds.sort((a, b) => a - b))
         .range([0, height]);
 
     const targetScale = d3.scalePoint()
-        .domain([...new Set(data.map(d => d.Target))].sort((a, b) => a - b))
+        .domain(targetIds.sort((a, b) => a - b))
         .range([0, height]);
 
-    svg.append("g")
-        .attr("transform", "translate(0,0)")
-        .call(d3.axisLeft(sourceScale));
+    const displayFrequency = 10;  // Adjusting this value to change label density
 
     svg.append("g")
-        .attr("transform", `translate(${width},0)`)
-        .call(d3.axisRight(targetScale));
+        .call(d3.axisLeft(sourceScale).tickValues(sourceIds.filter((d, i) => i % displayFrequency === 0)))
+        .attr("transform", "translate(0,0)");
+    
+    svg.append("g")
+        .call(d3.axisRight(targetScale).tickValues(targetIds.filter((d, i) => i % displayFrequency === 0)))
+        .attr("transform", `translate(${width},0)`);
+        
     
     console.log("SVG Setup width:", svg.attr("totalWidth"));
     return { svg, sourceScale, targetScale, width, height };
@@ -610,28 +629,38 @@ function setupSVGandAxes(data) {
 
 function drawLinks({ svg, sourceScale, targetScale, data, width }) {
     svg.selectAll("path").remove();
-    
-    console.log("SVG width:", svg.attr("width"));  // Check if width is properly set
-    console.log("Calculated width:", width);  // Output the calculated width used in path generation
-
 
     const colorScale = d3.scaleOrdinal(d3.schemeCategory10)
         .domain([...new Set(data.map(d => d.Source))]);
 
-    svg.selectAll("path")
+    const links = svg.append("g")
+       .selectAll("path")
        .data(data)
        .enter()
        .append("path")
        .attr("d", d => {
            const sourceY = sourceScale(d.Source);
            const targetY = targetScale(d.Target);
-           return `M0,${sourceY} L${width},${targetY}`;  // Use width here
+           return `M0,${sourceY} L${width},${targetY}`;
        })
        .attr("stroke", d => colorScale(d.Source))
        .attr("stroke-width", 2)
        .attr("opacity", 0.7)
        .attr("fill", "none");
+
+    // Tooltip functionality
+    links.on("mouseover", function(event, d) {
+        d3.select("#tooltip")
+          .style("display", "block")
+          .style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY + 10) + "px")
+          .html(`Source: ${d.Source}<br>Target: ${d.Target}<br>Weight: ${d.Weight.toFixed(4)}`);
+    })
+    .on("mouseout", function() {
+        d3.select("#tooltip").style("display", "none");
+    });
 }
+
 
 
 
