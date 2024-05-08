@@ -1,6 +1,18 @@
+.sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 200px;  /* Adjust the width as needed */
+    height: 100vh;
+    background-color: #333;  /* Same as the header for consistency */
+    padding: 20px;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    overflow-y: auto;  /* Allows scrolling for smaller screens */
+}
+
 body, html {
     margin: 0;
-    padding: 0;
+    padding-left: 200px; /* Sidebar width */
     font-family: Arial, sans-serif;
 }
 
@@ -16,19 +28,20 @@ header {
 /* New styles for dropdown */
 .dropdown {
     position: relative;
-    display: inline-block;
+    /*display: inline-block;*/
 }
 
 .dropdown-content {
     display: none;
     position: absolute;
+    top: 100%;  /* Aligns directly under the dropdown button */
+    left: 0;  /* Aligns with the left edge of the dropdown button */
     background-color: #f9f9f9;
-    color: black;
-    min-width: 160px;
+    width: 100%;  /* Ensures the dropdown matches the width of its parent */
     box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-    padding: 12px 16px;
     z-index: 1;
 }
+
 /* Additions to existing CSS */
 .dropdown-content div {
     padding: 5px;
@@ -52,39 +65,62 @@ header {
 }
 
 /* Update styles for dropdown content labels */
-#node-dropdown label {
-    color: black; /* This sets the text color to black */
-    margin-left: 8px; /* Optional: adds some space between the checkbox and the label */
+#node-checkbox-area label {
+    display: inline-block;  /* Ensures labels are in line */
+    vertical-align: middle;  /* Aligns text vertically with checkboxes */
+    margin-left: 8px;  /* Provides space between checkbox and label */
+    color: black; /* Changes text color to black */
 }
 
 /* Style for the checkboxes for a cleaner look */
 #node-dropdown input[type="checkbox"] {
     accent-color: #333; /* This changes the checkbox color */
+    vertical-align: middle;  /* Aligns checkboxes vertically in the middle */
+}
+#node-checkbox-area {
+    max-height: 150px;  /* Adjust according to the height of the sidebar */
+    overflow-y: auto;  /* Allows scrolling */
+    padding: 5px 0;  /* Padding for better spacing */
 }
 
 
+.dropbtn:hover .dropdown-content,
+.dropbtn:focus .dropdown-content {
+    display: block; /* Ensures dropdown shows on hover or focus */
+}
+
 #vis-container {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-around;
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* two columns */
+    grid-template-rows: auto auto; /* two rows */
+    gap: 20px; /* space between grid items */
     padding: 20px;
 }
 
 .visualization {
     border: 1px solid #ddd;
-    margin: 10px;
     padding: 20px;
-    width: 45%;
-    text-align: center;
     background-color: #f9f9f9;
-    overflow: hidden; /* Prevents the canvas from overflowing */
+    text-align: center;
 }
-
-@media (max-width: 600px) {
-    .visualization {
+@media (max-width: 800px) {
+    .sidebar {
         width: 100%;
+        height: auto;
+        position: relative;
+    }
+    body {
+        padding-left: 0;
+    }
+    #vis-container {
+        margin-left: 0;
+        grid-template-columns: 1fr; /* Stack the visualizations */
+    }
+    .visualization {
+        width: 100%; /* Full width for smaller devices */
     }
 }
+
 
 #visualization1 {
     width: 100%;       /* Full width of its container */
@@ -92,7 +128,6 @@ header {
     border: 1px solid #ccc; /* Optional: adds a border for visibility */
     /* Add any additional styling you need */
   }
-
   #visualization3 {
     width: 50%; /* or a specific pixel value */
     height: 650px; /* or a value that suits your layout */

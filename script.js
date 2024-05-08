@@ -67,7 +67,12 @@ function addDynamicEventListeners() {
 document.addEventListener('DOMContentLoaded', function() {
 
     //////////////////////////////////////////////////////////////////////////////////
-
+    const slider = document.getElementById('edgeWeightSlider');
+    if (slider) {
+        slider.addEventListener('input', () => {
+            updateEdgeVisibility(slider.value);
+        });
+    }
     //////////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////
     ////////////            3D Visualization Setup      /////////////////////////////
@@ -92,68 +97,6 @@ document.addEventListener('DOMContentLoaded', function() {
     scene.add(light);
 
     controls = new OrbitControls(camera, renderer.domElement);
-//////////////////////////////////////////////////////////////////////////////////////
-function getColorForChID(chID) {
-    // Simple hash function to get a color
-    let hash = 0;
-    for (let i = 0; i < chID.length; i++) {
-        hash = chID.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const color = (hash & 0x00FFFFFF).toString(16).toUpperCase();
-    return "#" + "00000".substring(0, 6 - color.length) + color;
-}
-
-// Then in your drawing code:
-//context.fillStyle = getColorForChID(String(node.ChID));
-
-
-//////////////////////////////////////////////////////////////////////////////////
-////////////            2D Visualization Setup      /////////////////////////////
-const vis2Container = document.getElementById('visualization2');
-const canvas2D = document.createElement('canvas');
-canvas2D.width = vis2Container.clientWidth;
-canvas2D.height = 500; // Set a fixed height or make it responsive
-canvas2D.id = 'canvas2D'; // Assign an ID to the canvas for easy reference
-vis2Container.appendChild(canvas2D);
-
-
-
-function draw2DVisualization(data) {
-    const canvas = document.getElementById('canvas2D');
-    if (!canvas) {
-        console.error("Canvas element not found!");
-        return;
-    }
-    const context = canvas.getContext('2d');
-    const scaleX = canvas.width / (getRange(data, 'x') + 1);
-    const scaleY = canvas.height / (getRange(data, 'y') + 1);
-
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    nodePositions = {}; // Reset positions map each time nodes are drawn
-
-    data.forEach(node => {
-        const numericId = node.id.replace(/[^\d]/g, '');
-        const x = (node.x - getMin(data, 'x')) * scaleX;
-        const y = (node.y - getMin(data, 'y')) * scaleY;
-
-        nodePositions[numericId] = { x, y };
-
-        context.beginPath();
-        context.arc(x, y, 10, 0, Math.PI * 2, true);
-        context.fillStyle = getColorForChID(String(node.ChID));
-        context.fill();
-    });
-}
-
-
-// Helper functions to get the range and minimum value of nodes
-function getRange(data, coord) {
-    return Math.max(...data.map(node => node[coord])) - Math.min(...data.map(node => node[coord]));
-}
-
-function getMin(data, coord) {
-    return Math.min(...data.map(node => node[coord]));
-}
 
 //setup2DCanvas();
 
@@ -477,17 +420,72 @@ function filterTopWeightedEdges(edges, selectedNodeIds) {
 ///////////////////////////////////
 //Function for Handling Filtered edges////
 
-    function fetchAndFilterEdgeData(filePath, selectedNodeIds, callback) {
-        d3.json(filePath).then(rawData => {
-            const filteredEdges = filterTopWeightedEdges(rawData, selectedNodeIds);
-            callback(filteredEdges);  // Execute the callback with filtered edges
-        }).catch(error => {
-            console.error("Error fetching and filtering edge data:", error);
-        });
-    }
+function fetchAndFilterEdgeData(filePath, selectedNodeIds, callback) {
+    d3.json(filePath).then(rawData => {
+        // Filter edges based on node selection only
+        const filteredEdges = rawData.filter(edge => 
+            selectedNodeIds.includes(String(edge.Source)) || selectedNodeIds.includes(String(edge.Target))
+        );
+        callback(filteredEdges);  // Execute the callback with filtered edges
+    }).catch(error => {
+        console.error("Error fetching and filtering edge data:", error);
+    });
+}
 
     
 ///////////////////////////////////
+///Slider Control for Edge Visibility in 3d and 2d vis///
+let maxEdgeWeight = 0;  // Global variable to store the maximum edge weight
+
+function updateEdgeVisibility(value) {
+    const selectedNodeIds = Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked'))
+                                 .map(checkbox => checkbox.dataset.nodeId);
+    const selectedDataset = document.getElementById('dataset-selector').value;
+    const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed.json' : 'Other_Dataset_Edge.json';
+    const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_3D.json' : 'Other_Dataset_Node_data.json'; // Correctly define nodeDataPath
+
+    
+    fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, function(filteredEdges) {
+        // Calculate the number of edges to show based on the slider percentage
+        const numberOfEdgesToShow = Math.ceil(filteredEdges.length * (value / 100));
+        document.getElementById('edgeWeightValue').innerText = `${value}% (${numberOfEdgesToShow} edges)`;
+        console.log(`Slider value: ${value}% - Showing top ${numberOfEdgesToShow} weighted edges.`);
+
+        // Sort edges by weight in descending order and take the top N based on the slider
+        filteredEdges.sort((a, b) => b.Weight - a.Weight);
+        const edgesToShow = filteredEdges.slice(0, numberOfEdgesToShow);
+        console.log(`Edges to show after filtering: ${edgesToShow.length}`);
+
+        clearEdges3D();
+        createEdges3D(edgesToShow);
+        
+        const canvas = document.getElementById('canvas2D');
+        const context = canvas.getContext('2d');
+        fetch(nodeDataPath).then(response => response.json()).then(nodeData => {
+            clearOnlyEdges2D(context, canvas, nodeData);
+            drawEdges2D(edgesToShow, context);
+        });
+    });
+}
+
+
+function clearOnlyEdges2D(context, canvas, nodeData) {
+    context.clearRect(0, 0, canvas.width, canvas.height); // Clears the entire canvas
+    draw2DVisualization(nodeData); // Redraw only nodes to avoid edge deletion
+}
+
+
+function clearEdges3D() {
+    // Traverse and remove all lines (edges) from the scene
+    const toRemove = [];
+    scene.traverse((object) => {
+        if (object instanceof THREE.Line) {
+            toRemove.push(object);
+        }
+    });
+    toRemove.forEach(object => scene.remove(object));
+}
+
 //Function for draw edges of selected nodes for 3d vis////
 function createEdges3D(edgeData) {
     const lineMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff });
@@ -549,12 +547,14 @@ function drawEdges2D(edgeData, context) {
 ///For Parallel Plots///
 // Function to setup and fetch data for the parallel plot
 
+
 function setupParallelPlotData(filePath) {
     fetch(filePath)
         .then(response => response.json())
         .then(data => {
             console.log("Original data length:", data.length);
-            console.log("Max weight in original data:", Math.max(...data.map(d => d.Weight)));
+            maxEdgeWeight = Math.max(...data.map(d => d.Weight));  // Update the global variable
+            console.log("Max weight in original data:", maxEdgeWeight);
 
             // Sort data by weight in descending order and get the top 10 links
             data.sort((a, b) => b.Weight - a.Weight);
@@ -674,3 +674,66 @@ function clearVisualizationScenes() {
 }
 ///////////////
     ////////////////////////////////////////////////////////////
+
+    //////////////////////////////////////////////////////////////////////////////////////
+function getColorForChID(chID) {
+    // Simple hash function to get a color
+    let hash = 0;
+    for (let i = 0; i < chID.length; i++) {
+        hash = chID.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const color = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+    return "#" + "00000".substring(0, 6 - color.length) + color;
+}
+
+// Then in your drawing code:
+//context.fillStyle = getColorForChID(String(node.ChID));
+
+
+//////////////////////////////////////////////////////////////////////////////////
+////////////            2D Visualization Setup      /////////////////////////////
+const vis2Container = document.getElementById('visualization2');
+const canvas2D = document.createElement('canvas');
+canvas2D.width = vis2Container.clientWidth;
+canvas2D.height = 500; // Set a fixed height or make it responsive
+canvas2D.id = 'canvas2D'; // Assign an ID to the canvas for easy reference
+vis2Container.appendChild(canvas2D);
+
+
+
+function draw2DVisualization(data) {
+    const canvas = document.getElementById('canvas2D');
+    if (!canvas) {
+        console.error("Canvas element not found!");
+        return;
+    }
+    const context = canvas.getContext('2d');
+    const scaleX = canvas.width / (getRange(data, 'x') + 1);
+    const scaleY = canvas.height / (getRange(data, 'y') + 1);
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    nodePositions = {}; // Reset positions map each time nodes are drawn
+
+    data.forEach(node => {
+        const numericId = node.id.replace(/[^\d]/g, '');
+        const x = (node.x - getMin(data, 'x')) * scaleX;
+        const y = (node.y - getMin(data, 'y')) * scaleY;
+
+        nodePositions[numericId] = { x, y };
+
+        context.beginPath();
+        context.arc(x, y, 10, 0, Math.PI * 2, true);
+        context.fillStyle = getColorForChID(String(node.ChID));
+        context.fill();
+    });
+}
+
+
+// Helper functions to get the range and minimum value of nodes
+function getRange(data, coord) {
+    return Math.max(...data.map(node => node[coord])) - Math.min(...data.map(node => node[coord]));
+}
+
+function getMin(data, coord) {
+    return Math.min(...data.map(node => node[coord]));
+}

@@ -7,58 +7,57 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header>
-        <!-- Dataset Selector -->
-        <select id="dataset-selector">
-            <option value="">Select a Dataset</option>
-            <option value="WT_BS">Bacillus Subtilis Wild Type</option>
-            <!-- More datasets can be added here -->
-        </select>
+    <!-- Sidebar for Controls -->
+    <div class="sidebar">
+        <header>
+            <!-- Dataset Selector -->
+            <select id="dataset-selector">
+                <option value="">Select a Dataset</option>
+                <option value="WT_BS">Bacillus Subtilis Wild Type</option>
+                <!-- More datasets can be added here -->
+            </select>
 
-    <!-- Node Selection -->
-<!-- Node Selection -->
-    <div id="node-selection" class="dropdown">
-        <button id="node-select-btn" class="dropbtn" type="button">Select Nodes</button>
-        <div id="node-dropdown" class="dropdown-content">
+            <!-- Node Selection -->
+            <div id="node-selection" class="dropdown">
+                <button id="node-select-btn" class="dropbtn">Select Nodes</button>
+                <div id="node-dropdown" class="dropdown-content">
+                    <div id="node-checkbox-area" style="overflow-y: auto; max-height: 200px;"> <!-- Scrollable Area -->
+                        <div>
+                            <input type="checkbox" id="select-all-nodes" />
+                            <label for="select-all-nodes">Select All</label>
+                        </div>
+                        <div id="node-checkboxes">
+                            <!-- Node checkboxes will be dynamically inserted here -->
+                        </div>
+                    </div>
+                    <!-- Fixed Buttons -->
+                    <div style="padding-top: 10px;">
+                        <button id="clear-nodes-button">Clear</button>
+                        <button id="visualize-nodes">Visualize</button>
+                    </div>
+                </div>
+            </div>
+            
+
             <div>
-                <!-- Corrected ID for Select All functionality -->
-                <input type="checkbox" id="select-all-nodes" />
-                <label for="select-all-nodes">Select All</label>
+                <label for="edgeWeightSlider">Adjust Edge Visibility:</label>
+                <input type="range" id="edgeWeightSlider" name="edgeWeightSlider" min="0" max="100" value="100">
+                <span id="edgeWeightValue">100%</span>
             </div>
-            <div id="node-checkboxes">
-                <!-- Node checkboxes will be dynamically inserted here -->
-            </div>
-            <!-- Corrected ID for Clear functionality -->
-            <button id="clear-nodes-button" type="button">Clear</button>
-            <!-- Corrected ID for Visualize functionality -->
-            <button id="visualize-nodes" type="button">Visualize</button>
-        </div>
+            
+        </header>
     </div>
 
-    <label for="edgeWeightSlider">Adjust Edge Visibility:</label>
-    <input type="range" id="edgeWeightSlider" name="edgeWeightSlider" min="0" max="100" value="50" oninput="updateEdgeVisibility(this.value)">
-    <span id="edgeWeightValue">50%</span>
-
-
-    </header>
+    <!-- Main Visualization Area -->
     <main>
         <div id="vis-container">
             <div id="visualization1" class="visualization">Visualization 1 Placeholder</div>
             <div id="visualization2" class="visualization">Visualization 2 Placeholder</div>
             <div id="visualization3" class="visualization">Visualization 3 Placeholder</div>
-            <div id="visualization4" class="visualization">Visualization 4 Placeholder
-                <div id="slider-container">
-                    <input type="range" id="weight-slider" min="0" max="1" step="0.01" value="0.1">
-                    <label for="weight-slider">Weight Threshold: <span id="weight-label">10%</span></label>
-                  </div>
-            </div>
-
-              
+            <div id="visualization4" class="visualization">Visualization 4 Placeholder</div>
         </div>
         <div id="tooltip" style="position: absolute; display: none; padding: 10px; background: rgba(0, 0, 0, 0.75); color: white; border-radius: 5px; pointer-events: none;"></div>
-
     </main>
-
     <!-- Your script file -->
     <script src="https://d3js.org/d3.v6.min.js"></script>
     <script type="module" src="script.js"></script>
