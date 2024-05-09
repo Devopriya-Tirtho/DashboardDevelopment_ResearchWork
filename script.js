@@ -332,7 +332,12 @@ function clearEdges3D() {
 
 //Function for draw edges of selected nodes for 3d vis////
 function createEdges3D(edgeData) {
-    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff });
+    // Use a light grey color (e.g., #CCCCCC) and set transparency
+    const lineMaterial = new THREE.LineBasicMaterial({
+        color: 0xCCCCCC,
+        transparent: true,
+        opacity: 0.5
+    });
 
     edgeData.forEach(edge => {
         const sourceNode = scene.getObjectByName(String(edge.Source));
@@ -345,7 +350,6 @@ function createEdges3D(edgeData) {
             scene.add(line);
             console.log(`Drawing edge between ${edge.Source} and ${edge.Target}`);
         } else {
-            // Log failure to retrieve nodes
             console.log(`Failed to find nodes for edge between ${edge.Source} and ${edge.Target}`);
         }
     });
@@ -354,14 +358,22 @@ function createEdges3D(edgeData) {
 }
 
 
+
     
 ///////////////////////////////////
 //Function for draw edges of selected nodes for 2d vis////
 
 function drawEdges2D(edgeData, context) {
-    console.log("Drawing edges in 2D for edge data:", edgeData);
+    context.strokeStyle = '#CCCCCC';  // Light grey color for edges
+    context.globalAlpha = 0.5;  // 50% opacity for a subtle appearance
+    context.lineWidth = 2;  // Slightly thicker line for better visibility
+    context.lineCap = 'round';  // Rounded ends for a smoother look
+    context.lineJoin = 'round';  // Rounded corners at line joins
 
-    context.strokeStyle = '#0000ff';  // Set edge color
+    // Setting shadow for a glow effect
+    context.shadowColor = '#CCCCCC';
+    context.shadowBlur = 10;  // Adjust the blur level for more or less glow
+
     edgeData.forEach(edge => {
         const sourceNode = nodePositions[edge.Source];
         const targetNode = nodePositions[edge.Target];
@@ -376,7 +388,12 @@ function drawEdges2D(edgeData, context) {
             console.log(`Nodes not found for edge from ${edge.Source} to ${edge.Target}`);
         }
     });
+
+    // Resetting context properties after drawing
+    context.globalAlpha = 1.0;
+    context.shadowBlur = 0;  // Remove shadow after drawing edges
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -539,14 +556,19 @@ function clearVisualizationScenes() {
 ////////////            2D Visualization Setup      /////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////
 function getColorForChID(chID) {
-    // Simple hash function to get a color
-    let hash = 0;
-    for (let i = 0; i < chID.length; i++) {
-        hash = chID.charCodeAt(i) + ((hash << 5) - hash);
+    if (chID === "1") {
+        return "#FF0000";  // Return red for the first chromosome
+    } else {
+        // Simple hash function to get a color for other chromosomes
+        let hash = 0;
+        for (let i = 0; i < chID.length; i++) {
+            hash = chID.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const color = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+        return "#" + "00000".substring(0, 6 - color.length) + color;
     }
-    const color = (hash & 0x00FFFFFF).toString(16).toUpperCase();
-    return "#" + "00000".substring(0, 6 - color.length) + color;
 }
+
 
 
 // Then in drawing code:
@@ -566,30 +588,44 @@ function draw2DVisualization(data) {
 
     const tooltip = document.getElementById('tooltip2D');
 
+    ////
+
     const canvas = document.getElementById('canvas2D');
     if (!canvas) {
         console.error("Canvas element not found!");
         return;
     }
     const context = canvas.getContext('2d');
-    const scaleX = canvas.width / (getRange(data, 'x') + 1);
-    const scaleY = canvas.height / (getRange(data, 'y') + 1);
+
+    // Modify scaleX and scaleY calculations to add a buffer for margins
+    // Define constants for canvas dimensions and node radius
+    const nodeRadius = 5;
+    const padding = 20; // Padding from the canvas edges
+
+    // Calculate scaling factors based on maximum coordinate ranges including padding
+    const scaleX = (canvas.width - 2 * padding) / (getRange(data, 'x'));
+    const scaleY = (canvas.height - 2 * padding) / (getRange(data, 'y'));
 
     context.clearRect(0, 0, canvas.width, canvas.height);
     nodePositions = {}; // Reset positions map each time nodes are drawn
 
     data.forEach(node => {
         const numericId = node.id.replace(/[^\d]/g, '');
-        const x = (node.x - getMin(data, 'x')) * scaleX;
-        const y = (node.y - getMin(data, 'y')) * scaleY;
-
+        // Adjust node positions to include padding and ensure they stay within the canvas
+        const x = padding + (node.x - getMin(data, 'x')) * scaleX;
+        const y = padding + (node.y - getMin(data, 'y')) * scaleY;
+    
         nodePositions[numericId] = { x, y };
-
+    
         context.beginPath();
-        context.arc(x, y, 10, 0, Math.PI * 2, true);
-        context.fillStyle = getColorForChID(String(node.ChID));
+        context.arc(x, y, nodeRadius, 0, Math.PI * 2, true);
+        context.shadowBlur = 0.5;
+        context.shadowColor = "rgba(255, 0, 0, 0.5)"; // Red glow
+        context.fillStyle = "red"; // Node color
         context.fill();
+        context.shadowBlur = 0; // Reset shadow blur for other elements
     });
+    
 
         // Function to check if a point is inside a node's circle
     function isPointInNode(x, y, nodeX, nodeY, radius) {
@@ -620,7 +656,7 @@ function draw2DVisualization(data) {
                 context.fillStyle = getColorForChID(String(node.ChID));
             }
             context.beginPath();
-            context.arc(x, y, 10, 0, Math.PI * 2, true); // Node radius is 10
+            context.arc(x, y, nodeRadius, 0, Math.PI * 2, true); // Node radius is 10
             context.fill();
         });
 
@@ -814,7 +850,8 @@ function updateHeatmapHighlights(svg) {
     scene = new THREE.Scene();
 
     const visualizationContainer = document.getElementById('visualization1');
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setClearColor(0x000000, 0); // Transparent background
     renderer.setSize(visualizationContainer.clientWidth, visualizationContainer.clientHeight);
     console.log("Renderer dimensions:", visualizationContainer.clientWidth, visualizationContainer.clientHeight);
     visualizationContainer.appendChild(renderer.domElement);
@@ -851,6 +888,7 @@ function onWindowResize() {
     // Scene background color
     scene.background = new THREE.Color(0xf0f0f0);
 //////////////////////////////////////////////////////////////////////////////////////
+
     // Animation loop
     function animate() {
         requestAnimationFrame(animate);
@@ -867,12 +905,16 @@ function onWindowResize() {
         nodeData.forEach(node => {
             const numericId = node.id.replace(/[^\d]/g, ''); // Assumes node.id is like 'Node1'
             const color = getColorForChID(String(node.ChID));
-            const nodeMaterial = new THREE.MeshPhongMaterial({ 
-                color: color, 
-                emissive: 0x000000,  // Initial emissive color set to black
-                emissiveIntensity: 0.5
+            // Set up the material with a glowing red color
+            const nodeMaterial = new THREE.MeshStandardMaterial({
+                color: 0xFF5733, // A vibrant red color
+                emissive: 0xFF5733, // Same color for emissive to create a glow effect
+                emissiveIntensity: 1, // Increased emissive intensity
+                roughness: 0.1, // A low roughness to make the material shinier
+                metalness: 0.5  // Increased metalness for a metallic sheen
             });
-            const geometry = new THREE.SphereGeometry(1, 32, 32);
+            // Reduce the node size
+            const geometry = new THREE.SphereGeometry(0.5, 32, 32); // Node radius set to 0.5
             const sphere = new THREE.Mesh(geometry, nodeMaterial);
             sphere.position.set(node.x * 0.1, node.y * 0.1, node.z * 0.1);
             sphere.name = numericId;
@@ -881,6 +923,7 @@ function onWindowResize() {
     
         renderer.render(scene, camera);
     }
+    
     
         function onCanvasClick(event) {
             var mouse = new THREE.Vector2();
