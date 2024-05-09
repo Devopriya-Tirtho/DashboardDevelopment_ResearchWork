@@ -91,18 +91,55 @@ header {
 
 #vis-container {
     display: grid;
-    grid-template-columns: 1fr 1fr; /* two columns */
-    grid-template-rows: auto auto; /* two rows */
-    gap: 20px; /* space between grid items */
-    padding: 20px;
+    grid-template-columns: repeat(2, 1fr);  /* Create two columns */
+    grid-gap: 20px;  /* Space between grid items */
+    align-items: start;  /* Align items at the start of their respective cells */
+    width: 100%;  /* Full width of the container */
+    margin: 0 auto;  /* Center the grid horizontally */
+    padding: 20px;  /* Padding around the grid container */
+    border: 3px solid #010101;  /* Border for definition */
 }
 
-.visualization {
-    border: 1px solid #ddd;
-    padding: 20px;
-    background-color: #f9f9f9;
-    text-align: center;
+.visualization-placeholder {
+    background: #fff;  /* White background */
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);  /* Shadow for depth */
+    border: 3px solid #010101;  /* Border for definition */
+    height: 500px;  /* Fixed height for consistency */
+    position: relative;  /* Relative positioning for internal positioning */
 }
+
+/* Specific settings for Visualization 3 to maintain its required size */
+#visualization3 {
+    height: 670px;  /* Adjusted height */
+    border: 3px solid #010101;  /* Border for definition */
+}
+#visualization1 {
+    height: 670px; /* Ensure height matches other visualizations if necessary */
+    flex-grow: 1;  /* Allows the visualization to fill available space */
+    min-width: 500px; /* Set a minimum width to prevent it from becoming too small */
+    border: 3px solid #010101;  /* Border for definition */
+}
+#visualization2 {
+    height: 670px; /* Ensure height matches other visualizations if necessary */
+    flex-grow: 1;  /* Allows the visualization to fill available space */
+    min-width: 500px; /* Set a minimum width to prevent it from becoming too small */
+    border: 3px solid #010101;  /* Border for definition */
+}
+#visualization4 {
+    height: 670px; /* Ensure height matches other visualizations if necessary */
+    flex-grow: 1;  /* Allows the visualization to fill available space */
+    min-width: 500px; /* Set a minimum width to prevent it from becoming too small */
+    border: 3px solid #010101;  /* Border for definition */
+}
+
+/* Additional rules to prevent overflow and manage content sizing */
+.visualization-placeholder {
+    overflow: hidden;  /* Hide any overflow */
+    display: flex;  /* Use flexbox to center content */
+    justify-content: center;  /* Center content horizontally */
+    align-items: center;  /* Center content vertically */
+}
+
 @media (max-width: 800px) {
     .sidebar {
         width: 100%;
@@ -121,15 +158,6 @@ header {
     }
 }
 
-
-#visualization1 {
-    width: 100%;       /* Full width of its container */
-    height: 500px;     /* Fixed height */
-    border: 1px solid #ccc; /* Optional: adds a border for visibility */
-    /* Add any additional styling you need */
-  }
-  #visualization3 {
-    width: 50%; /* or a specific pixel value */
-    height: 650px; /* or a value that suits your layout */
-  }
-  
+canvas {
+    pointer-events: auto; /* Ensure pointer events are enabled */
+}

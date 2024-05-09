@@ -4,6 +4,9 @@ import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.124/examples/js
 import { RGBELoader } from 'https://cdn.jsdelivr.net/npm/three@0.124/examples/jsm/loaders/RGBELoader.js'; 
 import { RoughnessMipmapper } from 'https://cdn.jsdelivr.net/npm/three@0.124/examples/jsm/utils/RoughnessMipmapper.js';
 
+//For 3d vis nodehighlight interaction
+var selectedNode = null;
+
 // Defining these globally
 var scene, camera, renderer, controls;
 // Define nodePositions globally
@@ -57,12 +60,30 @@ function addDynamicEventListeners() {
             const context = document.getElementById('canvas2D').getContext('2d');
             console.log("Available node positions before drawing 2D edges:", nodePositions);
             drawEdges2D(filteredEdges, context);
+
+            ///Heatmap Visualization///
+            // Update the global set of selected nodes based on the current checkbox state
+            selectedNodes.clear();  // Clear the set and add all currently selected nodes
+            selectedNodeIds.forEach(id => selectedNodes.add(id));
+
+            const svg = d3.select('#visualization3').select('svg');
+            updateHeatmapHighlights(svg);
+
+            //For Parallel Plot
+            setupAndDrawParallelPlot(edgeDataPath, selectedNodeIds);
+
         });
         
     });
     
     
 }
+
+
+
+////////////////////////////////////////////////////////////
+///////////////////// Start of DOM Content /////////////////
+////////////////////////////////////////////////////////////
 
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -73,59 +94,7 @@ document.addEventListener('DOMContentLoaded', function() {
             updateEdgeVisibility(slider.value);
         });
     }
-    //////////////////////////////////////////////////////////////////////////////////
-    //////////////////////////////////////////////////////////////////////////////////
-    ////////////            3D Visualization Setup      /////////////////////////////
-    // Setup Three.js scene, camera, renderer, and controls
-    scene = new THREE.Scene();
-
-    const visualizationContainer = document.getElementById('visualization1');
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(visualizationContainer.clientWidth, visualizationContainer.clientHeight);
-    visualizationContainer.appendChild(renderer.domElement);
-
-    camera = new THREE.PerspectiveCamera(45, visualizationContainer.clientWidth / visualizationContainer.clientHeight, 0.1, 1000);
-    camera.position.set(0, 0, 50);
-    camera.lookAt(new THREE.Vector3(0, 0, 0));
-    camera.updateProjectionMatrix();
-
-    var ambientLight = new THREE.AmbientLight(0xaaaaaa);
-    scene.add(ambientLight);
-
-    var light = new THREE.PointLight(0xffffff, 1);
-    light.position.set(50, 50, 50);
-    scene.add(light);
-
-    controls = new OrbitControls(camera, renderer.domElement);
-
-//setup2DCanvas();
-
-//////////////////////////////////////////////////////////////////////////////////////
-
-//////////////////////////////////////////////////////////////////////////////////////
-    // Inside your resize event and after you set up the renderer
-    function onWindowResize() {
-        camera.aspect = visualizationContainer.clientWidth / visualizationContainer.clientHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(visualizationContainer.clientWidth, visualizationContainer.clientHeight);
-    }
-
-    // Call this function to set the initial size based on the container
-    onWindowResize();
-
-    window.addEventListener('resize', onWindowResize, false);
- //////////////////////////////////////////////////////////////////////////////////////   
-
-    // Scene background color
-    scene.background = new THREE.Color(0xf0f0f0);
-//////////////////////////////////////////////////////////////////////////////////////
-    // Animation loop
-    function animate() {
-        requestAnimationFrame(animate);
-        controls.update(); // Needed if controls.enableDamping or controls.autoRotate are set to true
-        renderer.render(scene, camera);
-    }
-    animate();
+ 
 //////////////////////////////////////////////////////////////////////////////////////
 
     const datasetSelector = document.getElementById('dataset-selector');
@@ -171,180 +140,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error("Error fetching nodes:", error);
             });
     }
-
-        
-
-    function preprocessDataForHeatmap(rawData) {
-        // Create a new array that will contain both halves of the matrix
-        const processedData = [];
-      
-        // Iterate over each entry in the original data array
-        rawData.forEach(entry => {
-          // Add the original entry
-          processedData.push({
-            Source: (entry.Source),
-            Target: (entry.Target),
-            Weight: entry.Weight
-          });
-          // Add the mirrored entry if it's not the diagonal
-          if (entry.Source !== entry.Target) {
-            processedData.push({
-              Source: (entry.Target), // Note the switch here
-              Target: (entry.Source), // Source becomes Target and vice versa
-              Weight: entry.Weight // The weight is the same
-            });
-          }
-        });
-        
-        return processedData;
-      }
-      
-      function fetchProcessedEdgeData(filePath) {
-        // Fetch and process the edge data for heatmap and other visualizations
-        d3.json(filePath).then(rawData => {
-          // Preprocess data to include both halves for a full heatmap
-          const processedData = preprocessDataForHeatmap(rawData);
-          // Pass the processed data to the function that creates the heatmap
-          createHeatmap(processedData);
-          // If you have other visualizations that use this data, call those functions here too
-        }).catch(error => {
-          console.error("Error fetching processed edge data:", error);
-        });
-      }
-
-    //////////////////////////////////////////////////////////////////
-    /////////////////////////////////////////////////////////////////////  
-
-      function createHeatmap(data) {
-        // Select the visualization container and set up dimensions
-        const container = d3.select('#visualization3');
-        const margin = { top: 50, right: 50, bottom: 50, left: 50 };
-        const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
-        const height = container.node().getBoundingClientRect().height - margin.top - margin.bottom;
     
-        // Clear any existing content in the container
-        container.selectAll('*').remove();
-    
-        // Define a color scale for the heatmap with a domain centered around the median weight
-        // Find the maximum weight value for scaling color intensity
-        const maxWeight = d3.max(data, d => d.Weight);
-        const minWeight = d3.min(data, d => d.Weight); // Assuming minWeight is the minimum weight in your data
-
-        // Define a custom color interpolator that will make the colors darker
-        const colorInterpolator = t => {
-            // This function takes a value t between 0 and 1 and returns a color
-            // If you want to make the colors darker, you can adjust the range below
-            const start = 0.1; // Starting at 50% will make the colors generally darker
-            return d3.interpolateReds(start + t * (1 - start));
-        };
-
-    // Define a continuous color scale using the custom interpolator
-    const colorScale = d3.scaleSequential(colorInterpolator)
-        .domain([minWeight, maxWeight]);
-
-    
-        // Create an SVG element inside the container for the heatmap
-        const svg = container.append('svg')
-        .attr('width', width + margin.left + margin.right)
-        .attr('height', height + margin.top + margin.bottom);
-
-        const heatmapGroup = svg.append('g')
-            .attr('transform', `translate(${margin.left},${margin.top})`);
-    
-        // Find the maximum value for both Source and Target in the data to set up dynamic domain
-        const maxDataValue = d3.max(data, d => Math.max(d.Source, d.Target));
-
-        const xScale = d3.scaleLinear()
-            .domain([0, maxDataValue])
-            .range([0, width]);
-
-        const yScale = d3.scaleLinear()
-            .domain([0, maxDataValue])
-            .range([height, 0]);
-
-        // Calculate the size of the grid based on the new scale
-        // The grid size is dynamically determined by the maximum value
-        const gridSizeX = width / (maxDataValue + 1); // plus 1 to include the last grid at the end
-        const gridSizeY = height / (maxDataValue + 1); // plus 1 for the same reason
-// ...
-
-        // Append the axes inside the heatmapGroup
-        heatmapGroup.append("g")
-            .attr("transform", `translate(0,${height})`)
-            .call(d3.axisBottom(xScale).tickFormat(d => `${d}MB`));
-
-        heatmapGroup.append("g")
-            .call(d3.axisLeft(yScale).tickFormat(d => `${d}MB`));
-    
-    // Calculate the size of the grid squares - make them square based on the smaller dimension
-    const gridSize = Math.min(width / d3.max(data, d => d.Source + 1), height / d3.max(data, d => d.Target + 1));
-
-    // Create heatmap squares without stroke to mimic the Python visualization
-    // Create heatmap squares
-    heatmapGroup.selectAll('rect')
-        .data(data)
-        .enter()
-        .append('rect')
-        .attr('x', d => xScale(d.Source)) // Use the xScale for positioning
-        .attr('y', d => yScale(d.Target)) // Use the yScale for positioning
-        .attr('width', gridSizeX) // Set width to gridSizeX
-        .attr('height', gridSizeY) // Set height to gridSizeY
-        .style('fill', d => colorScale(d.Weight))
-        .style('stroke-width', 0); // No stroke for a seamless appearance
-}
-    
-
-
-      
-    
-function createNodes(nodeData) {
-    while(scene.children.length > 0) { 
-        scene.remove(scene.children[0]); 
-    }
-
-    nodeData.forEach(node => {
-        const numericId = node.id.replace(/[^\d]/g, ''); // Assumes node.id is like 'Node1'
-        const color = getColorForChID(String(node.ChID));
-        const nodeMaterial = new THREE.MeshBasicMaterial({ color: color });
-        const geometry = new THREE.SphereGeometry(1, 32, 32);
-        const sphere = new THREE.Mesh(geometry, nodeMaterial);
-        sphere.position.set(node.x * 0.1, node.y * 0.1, node.z * 0.1);
-        sphere.name = numericId;
-        scene.add(sphere);
-    });
-
-    renderer.render(scene, camera);
-}
-
-
-
-    // Detect clicks on the canvas and check if a node was clicked
+    // For Clicking in 3d Vis
+    console.log("Adding event listener to", renderer.domElement);
     renderer.domElement.addEventListener('click', onCanvasClick, false);
-
-    function onCanvasClick(event) {
-        // Calculate mouse position in normalized device coordinates
-        // (-1 to +1) for both components
-        var mouse = new THREE.Vector2();
-        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-        mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
-
-        // Update the picking ray with the camera and mouse position
-        var raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(mouse, camera);
-
-        // Calculate objects intersecting the picking ray
-        var intersects = raycaster.intersectObjects(scene.children);
-
-        for (var i = 0; i < intersects.length; i++) {
-            // intersects[i].object is the object (node) that was clicked
-            console.log("Clicked on node: " + intersects[i].object.name); // This is the node ID
-            // Here you can add the logic to highlight the node or pass its ID to other visualizations
-        }
+    function simpleClickTest(event) {
+        console.log("Canvas clicked at", event.clientX, event.clientY);
     }
     
+    renderer.domElement.removeEventListener('click', onCanvasClick);
+    renderer.domElement.addEventListener('click', simpleClickTest, false);
 
 
-
+    ///////////////////////////////
+    
     function updateNodeDropdown(nodes) {
         const nodeCheckboxesContainer = document.getElementById('node-checkboxes');
         nodeCheckboxesContainer.innerHTML = ''; // Clear existing checkboxes
@@ -380,6 +189,13 @@ function createNodes(nodeData) {
 
     //End of DomContentLoaded
     });
+////////////////////////////////////////////////////////////
+///////////////////////   End of DOM Content  /////////////////////////////////////
+////////////////////////////////////////////////////////////
+
+
+
+
 
 
 //////////////Out of DOM CONTENT LOADED/////////////////////
@@ -433,6 +249,10 @@ function fetchAndFilterEdgeData(filePath, selectedNodeIds, callback) {
 }
 
     
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+
+
 ///////////////////////////////////
 ///Slider Control for Edge Visibility in 3d and 2d vis///
 let maxEdgeWeight = 0;  // Global variable to store the maximum edge weight
@@ -458,15 +278,39 @@ function updateEdgeVisibility(value) {
 
         clearEdges3D();
         createEdges3D(edgesToShow);
-        
+
         const canvas = document.getElementById('canvas2D');
         const context = canvas.getContext('2d');
         fetch(nodeDataPath).then(response => response.json()).then(nodeData => {
             clearOnlyEdges2D(context, canvas, nodeData);
             drawEdges2D(edgesToShow, context);
         });
+
+        // Update the parallel plot
+        updateParallelPlot(edgeDataPath, selectedNodeIds, numberOfEdgesToShow);  // Assumes this function is adapted to fetch and filter as needed
     });
 }
+
+function updateParallelPlot(edgeDataPath, selectedNodeIds, numberOfEdgesToShow) {
+    fetch(edgeDataPath)
+        .then(response => response.json())
+        .then(data => {
+            const filteredData = data.filter(d => selectedNodeIds.includes(d.Source.toString()));
+            filteredData.sort((a, b) => b.Weight - a.Weight); // Sort by weight descending
+            const edgesToShow = filteredData.slice(0, numberOfEdgesToShow); // Take top N edges based on slider
+
+                // If no SVG exists, initialize it
+                const allNodes = {
+                    sources: [...new Set(data.map(d => d.Source))],
+                    targets: [...new Set(data.map(d => d.Target))]
+                };
+                const { svg, sourceScale, targetScale, width, height } = setupSVGandAxes(allNodes);
+
+                drawLinks({ svg, sourceScale, targetScale, data: edgesToShow, width });
+})
+        .catch(error => console.error("Error updating parallel plot:", error));
+}
+
 
 
 function clearOnlyEdges2D(context, canvas, nodeData) {
@@ -533,98 +377,116 @@ function drawEdges2D(edgeData, context) {
         }
     });
 }
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-///////////////
-    ///////////////////////////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////////////
 
-        // Define dimensions globally within the DOMContentLoaded's scope- For Parallel Plot
 
-        ////////////////////////
-////////////////////////
+
+
+///////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////
 ///For Parallel Plots///
-// Function to setup and fetch data for the parallel plot
 
+
+//Function for handling parallel plot after node selection
+function setupAndDrawParallelPlot(dataset, selectedNodeIds) {
+    fetch(dataset)
+        .then(response => response.json())
+        .then(data => {
+            // Filter data to only include edges that have sources or targets in selectedNodeIds
+            //const filteredData = data.filter(d => selectedNodeIds.includes(String(d.Source)) || selectedNodeIds.includes(String(d.Target)));
+            const filteredData = data.filter(d => selectedNodeIds.includes(String(d.Source)));
+            // Check if there is any data to process
+            if (filteredData.length === 0) {
+                console.log("No data to draw links for selected nodes.");
+                return;
+            }
+
+            // Construct allNodes from filteredData
+            const allNodes = {
+                sources: [...new Set(filteredData.map(d => d.Source))].sort((a, b) => a - b),
+                targets: [...new Set(filteredData.map(d => d.Target))].sort((a, b) => a - b)
+            };
+
+            // Setup SVG and axes
+            const { svg, sourceScale, targetScale, width, height } = setupSVGandAxes(allNodes);
+
+            console.log("Filtered data for links:", filteredData);
+
+            // Draw links only for selected nodes
+            drawLinks({ svg, sourceScale, targetScale, data: filteredData, width }); 
+        })
+        .catch(error => console.error("Error setting up parallel plot:", error));
+}
+
+
+// Function to setup and fetch data for the parallel plot
 
 function setupParallelPlotData(filePath) {
     fetch(filePath)
         .then(response => response.json())
         .then(data => {
-            console.log("Original data length:", data.length);
-            maxEdgeWeight = Math.max(...data.map(d => d.Weight));  // Update the global variable
+            maxEdgeWeight = Math.max(...data.map(d => d.Weight));
             console.log("Max weight in original data:", maxEdgeWeight);
 
-            // Sort data by weight in descending order and get the top 10 links
-            data.sort((a, b) => b.Weight - a.Weight);
-            const topEdges = data.slice(0, 10);
-            //const top10PercentCount = Math.ceil(data.length * 0.01);
-            //const topEdges = data.slice(0, top10PercentCount);
-
-            console.log("Filtered top edges length:", topEdges.length);
-            console.log("Weight range in top edges:", topEdges.map(d => d.Weight));
-
-            // Assuming setupSVGandAxes returns { svg, sourceScale, targetScale }
             const allNodes = {
-                sources: [...new Set(data.map(d => d.Source))].sort((a, b) => a - b),
-                targets: [...new Set(data.map(d => d.Target))].sort((a, b) => a - b)
+                sources: [...new Set(data.map(d => d.Source))],
+                targets: [...new Set(data.map(d => d.Target))]
             };
-            
-            const { svg, sourceScale, targetScale, width, height } = setupSVGandAxes(allNodes, topEdges);  // Pass filtered data for SVG setup
-            drawLinks({ svg, sourceScale, targetScale, data: topEdges, width });  // Ensure to pass filtered data for drawing
+
+            // Make sure to pass 'allNodes' correctly
+            console.log("All Nodes:", allNodes);
+
+            setupSVGandAxes(allNodes); // Now passes 'allNodes'
         })
         .catch(error => console.error("Error fetching parallel plot data:", error));
 }
 
 
-function setupSVGandAxes(allNodes, data) {
+function setupSVGandAxes(allNodes) {
+    const container = d3.select("#visualization4");
     const margin = { top: 30, right: 30, bottom: 30, left: 30 },
-         totalWidth = 960,
-         totalHeight = 500,
+         totalWidth = 700,
+         totalHeight = 630,
          width = totalWidth - margin.left - margin.right,
          height = totalHeight - margin.top - margin.bottom;
 
-    const svg = d3.select("#visualization4").append("svg")
+    // Remove any existing SVG first
+    container.select("svg").remove();
+
+    // Create a new SVG element
+    const svg = container.append("svg")
         .attr("width", totalWidth)
         .attr("height", totalHeight)
         .append("g")
         .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    // Use all available nodes for source and target to maintain complete axes
-    const sourceIds = allNodes.sources;
-    const targetIds = allNodes.targets;
-
-    // const sourceScale = d3.scalePoint()
-    //     .domain([...new Set(data.map(d => d.Source))].sort((a, b) => a - b))
-    //     .range([0, height]);
-
-    // const targetScale = d3.scalePoint()
-    //     .domain([...new Set(data.map(d => d.Target))].sort((a, b) => a - b))
-    //     .range([0, height]);
-
     const sourceScale = d3.scalePoint()
-        .domain(sourceIds.sort((a, b) => a - b))
+        .domain(allNodes.sources.sort((a, b) => a - b))
         .range([0, height]);
 
     const targetScale = d3.scalePoint()
-        .domain(targetIds.sort((a, b) => a - b))
+        .domain(allNodes.targets.sort((a, b) => a - b))
         .range([0, height]);
 
-    const displayFrequency = 10;  // Adjusting this value to change label density
+    // Function to select every 10th element for label
+    const tickInterval = 10;
+    const sourceTicks = allNodes.sources.filter((d, i) => i % tickInterval === 0);
+    const targetTicks = allNodes.targets.filter((d, i) => i % tickInterval === 0);
 
     svg.append("g")
-        .call(d3.axisLeft(sourceScale).tickValues(sourceIds.filter((d, i) => i % displayFrequency === 0)))
+        .call(d3.axisLeft(sourceScale).tickValues(sourceTicks))
         .attr("transform", "translate(0,0)");
     
     svg.append("g")
-        .call(d3.axisRight(targetScale).tickValues(targetIds.filter((d, i) => i % displayFrequency === 0)))
+        .call(d3.axisRight(targetScale).tickValues(targetTicks))
         .attr("transform", `translate(${width},0)`);
-        
-    
-    console.log("SVG Setup width:", svg.attr("totalWidth"));
+
     return { svg, sourceScale, targetScale, width, height };
 }
+
+
 
 
 function drawLinks({ svg, sourceScale, targetScale, data, width }) {
@@ -662,20 +524,20 @@ function drawLinks({ svg, sourceScale, targetScale, data, width }) {
 }
 
 
-
-
-
-
-
 function clearVisualizationScenes() {
     while(scene.children.length > 0) { 
         scene.remove(scene.children[0]); 
     }
 }
-///////////////
-    ////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
 
-    //////////////////////////////////////////////////////////////////////////////////////
+
+
+////////////////////////////////////////////////////////////
+////////////            2D Visualization Setup      /////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
 function getColorForChID(chID) {
     // Simple hash function to get a color
     let hash = 0;
@@ -686,10 +548,9 @@ function getColorForChID(chID) {
     return "#" + "00000".substring(0, 6 - color.length) + color;
 }
 
-// Then in your drawing code:
+
+// Then in drawing code:
 //context.fillStyle = getColorForChID(String(node.ChID));
-
-
 //////////////////////////////////////////////////////////////////////////////////
 ////////////            2D Visualization Setup      /////////////////////////////
 const vis2Container = document.getElementById('visualization2');
@@ -702,6 +563,9 @@ vis2Container.appendChild(canvas2D);
 
 
 function draw2DVisualization(data) {
+
+    const tooltip = document.getElementById('tooltip2D');
+
     const canvas = document.getElementById('canvas2D');
     if (!canvas) {
         console.error("Canvas element not found!");
@@ -726,6 +590,48 @@ function draw2DVisualization(data) {
         context.fillStyle = getColorForChID(String(node.ChID));
         context.fill();
     });
+
+        // Function to check if a point is inside a node's circle
+    function isPointInNode(x, y, nodeX, nodeY, radius) {
+        return Math.sqrt((x - nodeX) ** 2 + (y - nodeY) ** 2) < radius;
+    }
+
+    canvas.addEventListener('mousemove', function(e) {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+        let foundNode = false;
+
+        //context.clearRect(0, 0, canvas.width, canvas.height); // Clear and redraw for hover effects
+        data.forEach(node => {
+            const numericId = node.id.replace(/[^\d]/g, '');
+            const x = nodePositions[numericId].x;
+            const y = nodePositions[numericId].y;
+            if (isPointInNode(mouseX, mouseY, x, y, 10)) { // Node radius is 10
+                tooltip.style.display = 'block';
+                tooltip.style.left = `${e.clientX + 10}px`;
+                tooltip.style.top = `${e.clientY + 10}px`;
+                tooltip.innerHTML = `Node ID: ${node.id}`;
+
+                // Highlight the node
+                context.fillStyle = 'yellow'; // Change color for highlight
+                foundNode = true;
+            } else {
+                context.fillStyle = getColorForChID(String(node.ChID));
+            }
+            context.beginPath();
+            context.arc(x, y, 10, 0, Math.PI * 2, true); // Node radius is 10
+            context.fill();
+        });
+
+        if (!foundNode) {
+            tooltip.style.display = 'none';
+        }
+    });
+
+    canvas.addEventListener('mouseout', function() {
+        tooltip.style.display = 'none'; // Hide tooltip when not hovering over canvas
+    });
 }
 
 
@@ -737,3 +643,266 @@ function getRange(data, coord) {
 function getMin(data, coord) {
     return Math.min(...data.map(node => node[coord]));
 }
+
+//////////////////////////////////////
+function fetchProcessedEdgeData(filePath) {
+    // Fetch and process the edge data for heatmap and other visualizations
+    d3.json(filePath).then(rawData => {
+      // Preprocess data to include both halves for a full heatmap
+      const processedData = preprocessDataForHeatmap(rawData);
+      // Pass the processed data to the function that creates the heatmap
+      createHeatmap(processedData);
+      // If you have other visualizations that use this data, call those functions here too
+    }).catch(error => {
+      console.error("Error fetching processed edge data:", error);
+    });
+  }
+
+  
+function preprocessDataForHeatmap(rawData) {
+    // Create a new array that will contain both halves of the matrix
+    const processedData = [];
+  
+    // Iterate over each entry in the original data array
+    rawData.forEach(entry => {
+      // Add the original entry
+      processedData.push({
+        Source: (entry.Source),
+        Target: (entry.Target),
+        Weight: entry.Weight
+      });
+      // Add the mirrored entry if it's not the diagonal
+      if (entry.Source !== entry.Target) {
+        processedData.push({
+          Source: (entry.Target), // Note the switch here
+          Target: (entry.Source), // Source becomes Target and vice versa
+          Weight: entry.Weight // The weight is the same
+        });
+      }
+    });
+    
+    return processedData;
+  }
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////////////////////
+///////////////////////Heatmap Setting//////////////////////////////////////////////  
+
+  function createHeatmap(data) {
+    const tooltip = d3.select("#tooltipHeatmap");
+    // Select the visualization container and set up dimensions
+    const container = d3.select('#visualization3');
+    const margin = { top: 50, right: 50, bottom: 50, left: 50 };
+    const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
+    const height = container.node().getBoundingClientRect().height - margin.top - margin.bottom;
+
+    // Clear any existing content in the container
+    container.selectAll('*').remove();
+
+    // Define a color scale for the heatmap with a domain centered around the median weight
+    // Find the maximum weight value for scaling color intensity
+    const maxWeight = d3.max(data, d => d.Weight);
+    const minWeight = d3.min(data, d => d.Weight); // Assuming minWeight is the minimum weight in your data
+
+    // Define a custom color interpolator that will make the colors darker
+    const colorInterpolator = t => {
+        // This function takes a value t between 0 and 1 and returns a color
+        // If you want to make the colors darker, you can adjust the range below
+        const start = 0.1; // Starting at 50% will make the colors generally darker
+        return d3.interpolateReds(start + t * (1 - start));
+    };
+
+// Define a continuous color scale using the custom interpolator
+const colorScale = d3.scaleSequential(colorInterpolator)
+    .domain([minWeight, maxWeight]);
+
+
+    // Create an SVG element inside the container for the heatmap
+    const svg = container.append('svg')
+    .attr('width', width + margin.left + margin.right)
+    .attr('height', height + margin.top + margin.bottom);
+
+    const heatmapGroup = svg.append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // Find the maximum value for both Source and Target in the data to set up dynamic domain
+    const maxDataValue = d3.max(data, d => Math.max(d.Source, d.Target));
+
+    const xScale = d3.scaleLinear()
+        .domain([0, maxDataValue])
+        .range([0, width]);
+
+    const yScale = d3.scaleLinear()
+        .domain([0, maxDataValue])
+        .range([height, 0]);
+
+    // Calculate the size of the grid based on the new scale
+    // The grid size is dynamically determined by the maximum value
+    const gridSizeX = width / (maxDataValue + 1); // plus 1 to include the last grid at the end
+    const gridSizeY = height / (maxDataValue + 1); // plus 1 for the same reason
+// ...
+
+    // Append the axes inside the heatmapGroup
+    heatmapGroup.append("g")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(xScale).tickFormat(d => `${d}MB`));
+
+    heatmapGroup.append("g")
+        .call(d3.axisLeft(yScale).tickFormat(d => `${d}MB`));
+
+// Calculate the size of the grid squares - make them square based on the smaller dimension
+const gridSize = Math.min(width / d3.max(data, d => d.Source + 1), height / d3.max(data, d => d.Target + 1));
+
+// Create heatmap squares without stroke to mimic the Python visualization
+// Create heatmap squares
+heatmapGroup.selectAll('rect')
+    .data(data)
+    .enter()
+    .append('rect')
+    .attr('x', d => xScale(d.Source)) // Use the xScale for positioning
+    .attr('y', d => yScale(d.Target)) // Use the yScale for positioning
+    .attr('width', gridSizeX) // Set width to gridSizeX
+    .attr('height', gridSizeY) // Set height to gridSizeY
+    .style('fill', d => colorScale(d.Weight))
+    .style('stroke-width', 0) // No stroke for a seamless appearance
+    .on('mouseover', function(e, d) {
+        tooltip.style('display', 'block');
+        tooltip.html(`Source: ${d.Source}<br>Target: ${d.Target}<br>Weight: ${d.Weight.toFixed(6)}`);
+    })
+    .on('mousemove', function(e) {
+        tooltip.style('left', (e.pageX + 10) + 'px')
+               .style('top', (e.pageY + 10) + 'px');
+    })
+    .on('mouseout', function() {
+        tooltip.style('display', 'none');
+    });
+}
+
+//////Function for Highlighting the Heatmap based on node selection/////
+// Set to track selected nodes
+let selectedNodes = new Set();
+
+function updateHeatmapHighlights(svg) {
+    // Clear all highlights
+    svg.selectAll('rect')
+        .style('stroke', null)
+        .style('stroke-width', 0);
+
+    // Reapply highlights for all selected nodes
+    selectedNodes.forEach(nodeId => {
+        svg.selectAll('rect')
+            .filter(d => d.Source == nodeId || d.Target == nodeId)
+            .style('stroke', 'black')
+            .style('stroke-width', 2);
+    });
+}
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
+
+
+////////////////////////////////////////////////////////////
+/////////////////////////For 3d Vis////////////////////////
+
+
+   //////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////
+    ////////////            3D Visualization Setup      /////////////////////////////
+    // Setup Three.js scene, camera, renderer, and controls
+    scene = new THREE.Scene();
+
+    const visualizationContainer = document.getElementById('visualization1');
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(visualizationContainer.clientWidth, visualizationContainer.clientHeight);
+    console.log("Renderer dimensions:", visualizationContainer.clientWidth, visualizationContainer.clientHeight);
+    visualizationContainer.appendChild(renderer.domElement);
+
+    camera = new THREE.PerspectiveCamera(45, visualizationContainer.clientWidth / visualizationContainer.clientHeight, 0.1, 1000);
+    camera.position.set(0, 0, 50);
+    camera.lookAt(new THREE.Vector3(0, 0, 0));
+    camera.updateProjectionMatrix();
+
+    var ambientLight = new THREE.AmbientLight(0xaaaaaa);
+    scene.add(ambientLight);
+
+    var light = new THREE.PointLight(0xffffff, 1);
+    light.position.set(50, 50, 50);
+    scene.add(light);
+
+    controls = new OrbitControls(camera, renderer.domElement);
+
+//setup2DCanvas();
+
+//////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////
+function onWindowResize() {
+    camera.aspect = visualizationContainer.clientWidth / visualizationContainer.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(visualizationContainer.clientWidth, visualizationContainer.clientHeight);
+}
+
+    window.addEventListener('resize', onWindowResize, false);
+    onWindowResize();  // Call initially to set size.
+ //////////////////////////////////////////////////////////////////////////////////////   
+
+    // Scene background color
+    scene.background = new THREE.Color(0xf0f0f0);
+//////////////////////////////////////////////////////////////////////////////////////
+    // Animation loop
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update(); // Needed if controls.enableDamping or controls.autoRotate are set to true
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    function createNodes(nodeData) {
+        while(scene.children.length > 0) { 
+            scene.remove(scene.children[0]); 
+        }
+    
+        nodeData.forEach(node => {
+            const numericId = node.id.replace(/[^\d]/g, ''); // Assumes node.id is like 'Node1'
+            const color = getColorForChID(String(node.ChID));
+            const nodeMaterial = new THREE.MeshPhongMaterial({ 
+                color: color, 
+                emissive: 0x000000,  // Initial emissive color set to black
+                emissiveIntensity: 0.5
+            });
+            const geometry = new THREE.SphereGeometry(1, 32, 32);
+            const sphere = new THREE.Mesh(geometry, nodeMaterial);
+            sphere.position.set(node.x * 0.1, node.y * 0.1, node.z * 0.1);
+            sphere.name = numericId;
+            scene.add(sphere);
+        });
+    
+        renderer.render(scene, camera);
+    }
+    
+        function onCanvasClick(event) {
+            var mouse = new THREE.Vector2();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+        
+            console.log("Mouse NDC Position:", mouse.x, mouse.y); // Debug mouse positions
+        
+            var raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+        
+            var intersects = raycaster.intersectObjects(scene.children);
+            console.log("Intersections found:", intersects.length); // Debug number of intersections
+        
+            if (intersects.length > 0) {
+                if (selectedNode) {
+                    selectedNode.material.emissive.setHex(0x000000);
+                }
+        
+                selectedNode = intersects[0].object;
+                selectedNode.material.emissive.setHex(0xff0000);
+                console.log("Clicked on node: " + selectedNode.name); // Should log when a node is clicked
+            }
+        }
+        
