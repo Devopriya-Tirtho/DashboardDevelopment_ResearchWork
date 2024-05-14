@@ -411,31 +411,31 @@ function setupAndDrawParallelPlot(dataset, selectedNodeIds) {
     fetch(dataset)
         .then(response => response.json())
         .then(data => {
-            // Filter data to only include edges that have sources or targets in selectedNodeIds
-            //const filteredData = data.filter(d => selectedNodeIds.includes(String(d.Source)) || selectedNodeIds.includes(String(d.Target)));
+            // Construct allNodes from the full dataset, not just filteredData
+            const allNodes = {
+                sources: [...new Set(data.map(d => d.Source))].sort((a, b) => a - b),
+                targets: [...new Set(data.map(d => d.Target))].sort((a, b) => a - b)
+            };
+
+            // Now filter data to only include edges that have sources or targets in selectedNodeIds
             const filteredData = data.filter(d => selectedNodeIds.includes(String(d.Source)));
-            // Check if there is any data to process
+
             if (filteredData.length === 0) {
                 console.log("No data to draw links for selected nodes.");
                 return;
             }
 
-            // Construct allNodes from filteredData
-            const allNodes = {
-                sources: [...new Set(filteredData.map(d => d.Source))].sort((a, b) => a - b),
-                targets: [...new Set(filteredData.map(d => d.Target))].sort((a, b) => a - b)
-            };
-
-            // Setup SVG and axes
+            // Setup SVG and axes using allNodes to ensure all possible nodes are included
             const { svg, sourceScale, targetScale, width, height } = setupSVGandAxes(allNodes);
 
             console.log("Filtered data for links:", filteredData);
 
-            // Draw links only for selected nodes
+            // Draw links only for selected nodes using the filtered data
             drawLinks({ svg, sourceScale, targetScale, data: filteredData, width }); 
         })
         .catch(error => console.error("Error setting up parallel plot:", error));
 }
+
 
 
 // Function to setup and fetch data for the parallel plot
@@ -462,6 +462,9 @@ function setupParallelPlotData(filePath) {
 
 
 function setupSVGandAxes(allNodes) {
+    // Combine sources and targets into one set, then convert to sorted array
+    const combinedNodes = [...new Set([...allNodes.sources, ...allNodes.targets])].sort((a, b) => a - b);
+
     const container = d3.select("#visualization4");
     const margin = { top: 30, right: 30, bottom: 30, left: 30 },
          totalWidth = 700,
@@ -479,25 +482,26 @@ function setupSVGandAxes(allNodes) {
         .append("g")
         .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    const sourceScale = d3.scalePoint()
-        .domain(allNodes.sources.sort((a, b) => a - b))
+        const sourceScale = d3.scalePoint()
+        .domain(combinedNodes)
         .range([0, height]);
 
-    const targetScale = d3.scalePoint()
-        .domain(allNodes.targets.sort((a, b) => a - b))
+        const targetScale = d3.scalePoint()
+        .domain(combinedNodes)
         .range([0, height]);
 
     // Function to select every 10th element for label
+    // Function to select every 10th element for label, using the combined node list
     const tickInterval = 10;
-    const sourceTicks = allNodes.sources.filter((d, i) => i % tickInterval === 0);
-    const targetTicks = allNodes.targets.filter((d, i) => i % tickInterval === 0);
+    const ticks = combinedNodes.filter((d, i) => i % tickInterval === 0);
+
 
     svg.append("g")
-        .call(d3.axisLeft(sourceScale).tickValues(sourceTicks))
+        .call(d3.axisLeft(sourceScale).tickValues(ticks))
         .attr("transform", "translate(0,0)");
     
     svg.append("g")
-        .call(d3.axisRight(targetScale).tickValues(targetTicks))
+        .call(d3.axisRight(targetScale).tickValues(ticks))
         .attr("transform", `translate(${width},0)`);
 
     return { svg, sourceScale, targetScale, width, height };
@@ -725,6 +729,13 @@ function preprocessDataForHeatmap(rawData) {
 
 //////////////////////////////////////////////////////////////////
 ///////////////////////Heatmap Setting//////////////////////////////////////////////  
+//For Zoom Functionality//
+const zoom = d3.zoom()
+    .scaleExtent([1, 10])  // Limit zooming between 1x and 10x
+    .on('zoom', (event) => {
+        heatmapGroup.attr('transform', event.transform);  // Apply transformation
+    });
+
 
   function createHeatmap(data) {
     const tooltip = d3.select("#tooltipHeatmap");
@@ -758,7 +769,12 @@ const colorScale = d3.scaleSequential(colorInterpolator)
     // Create an SVG element inside the container for the heatmap
     const svg = container.append('svg')
     .attr('width', width + margin.left + margin.right)
-    .attr('height', height + margin.top + margin.bottom);
+    .attr('height', height + margin.top + margin.bottom)
+    .call(d3.zoom().scaleExtent([1, 10]).on('zoom', (event) => {
+        heatmapGroup.attr('transform', event.transform);
+    }))
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
 
     const heatmapGroup = svg.append('g')
         .attr('transform', `translate(${margin.left},${margin.top})`);
@@ -821,19 +837,50 @@ heatmapGroup.selectAll('rect')
 let selectedNodes = new Set();
 
 function updateHeatmapHighlights(svg) {
-    // Clear all highlights
+    // Define a vibrant stroke color and increased stroke width
+    const highlightColor = '#ff5722';  // Example: bright orange
+    const highlightWidth = 3;  // Increased stroke width for better visibility
+
+    // Optional: Define and append an SVG filter for a glow effect
+    const filter = svg.select("#glow-filter");
+    if (filter.empty()) {
+        const defs = svg.append("defs");
+        const filter = defs.append("filter")
+            .attr("id", "glow-filter")
+            .attr("width", "200%")
+            .attr("height", "200%");
+        filter.append("feGaussianBlur")
+            .attr("in", "SourceAlpha")
+            .attr("stdDeviation", 2.5)
+            .attr("result", "blur");
+        filter.append("feOffset")
+            .attr("in", "blur")
+            .attr("dx", 0)
+            .attr("dy", 0)
+            .attr("result", "offsetBlur");
+        const feMerge = filter.append("feMerge");
+        feMerge.append("feMergeNode")
+            .attr("in", "offsetBlur");
+        feMerge.append("feMergeNode")
+            .attr("in", "SourceGraphic");
+    }
+
+    // Clear all previous highlights
     svg.selectAll('rect')
         .style('stroke', null)
-        .style('stroke-width', 0);
+        .style('stroke-width', 0)
+        .style("filter", null);  // Remove any existing glow effect
 
     // Reapply highlights for all selected nodes
     selectedNodes.forEach(nodeId => {
         svg.selectAll('rect')
             .filter(d => d.Source == nodeId || d.Target == nodeId)
-            .style('stroke', 'black')
-            .style('stroke-width', 2);
+            .style('stroke', highlightColor)
+            .style('stroke-width', highlightWidth)
+            .style("filter", "url(#glow-filter)");  // Apply the glow effect
     });
 }
+
 ////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
@@ -897,6 +944,7 @@ function onWindowResize() {
     }
     animate();
 
+    //For Creating Nodes for 3d Visualization
     function createNodes(nodeData) {
         while(scene.children.length > 0) { 
             scene.remove(scene.children[0]); 
@@ -924,7 +972,52 @@ function onWindowResize() {
         renderer.render(scene, camera);
     }
     
+    //Updating Tooltip for 3d Visualization
+    function updateTooltip(event, node) {
+        const tooltip = document.getElementById('tooltip3D');
+        if (node) {
+            tooltip.style.display = 'block';
+            tooltip.style.left = `${event.clientX + 10}px`;
+            tooltip.style.top = `${event.clientY + 10}px`;
+            tooltip.innerHTML = `Node ID: ${node.name}`;
+        } else {
+            tooltip.style.display = 'none';
+        }
+    }
     
+
+    //Function for mouse hover on 3d visualization
+    renderer.domElement.addEventListener('mousemove', function(event) {
+        var rect = renderer.domElement.getBoundingClientRect();  // Get the bounding rectangle of renderer
+    
+        // Convert mouse position to NDC
+        var mouse = new THREE.Vector2();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+        // Update the picking ray with the camera and mouse position
+        var raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, camera);
+    
+        // Perform raycasting
+        var intersects = raycaster.intersectObjects(scene.children);
+    
+        if (intersects.length > 0) {
+            let hoveredNode = intersects[0].object;
+            hoveredNode.material.emissive.setHex(0xffff00); // Highlight the node
+            updateTooltip(event, hoveredNode);
+        } else {
+            scene.children.forEach(child => {
+                if (child instanceof THREE.Mesh) {
+                    child.material.emissive.setHex(child.material.color.getHex()); // Reset glow to original color
+                }
+            });
+            updateTooltip(event, null); // Hide tooltip when not hovering over any node
+        }
+    });
+    
+    
+    // For Mouse Click Function- Must have; It control the mouse click in the node selection dropdown menu as well
         function onCanvasClick(event) {
             var mouse = new THREE.Vector2();
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
