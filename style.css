@@ -110,7 +110,7 @@ header {
 
 /* Specific settings for Visualization 3 to maintain its required size */
 #visualization3 {
-    height: 670px;  /* Adjusted height */
+    height: 670px;   /*Adjusted height */
     border: 3px solid #010101;  /* Border for definition */
 }
 #visualization1 {
@@ -160,4 +160,14 @@ header {
 
 canvas {
     pointer-events: auto; /* Ensure pointer events are enabled */
+}
+
+#tooltipParallelPlot {
+    position: absolute;
+    display: none;
+    background: lightgray;
+    padding: 5px;
+    border: 1px solid #ccc;
+    pointer-events: none; /* Ensures the tooltip doesn't interfere with mouse events */
+    z-index: 10; /* Makes sure the tooltip is on top of other elements */
 }

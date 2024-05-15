@@ -106,6 +106,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 fetchNodesFromJson('WT_BS_Node_3D.json'); // Specific for 3D visualizations
                 fetchProcessedEdgeData('WT_BS_Edge_processed.json');
                 setupParallelPlotData('WT_BS_Edge_processed.json'); // Parallel plot specific data
+                fetchGeneDensityData('WT_BS_gene_density.json'); // Fetch gene density data
                 break;
             //case 'Other_Dataset': // Example of another dataset
                 //clearVisualizationScenes();
@@ -482,19 +483,17 @@ function setupSVGandAxes(allNodes) {
         .append("g")
         .attr("transform", `translate(${margin.left},${margin.top})`);
 
-        const sourceScale = d3.scalePoint()
+    const sourceScale = d3.scalePoint()
         .domain(combinedNodes)
         .range([0, height]);
 
-        const targetScale = d3.scalePoint()
+    const targetScale = d3.scalePoint()
         .domain(combinedNodes)
         .range([0, height]);
 
-    // Function to select every 10th element for label
     // Function to select every 10th element for label, using the combined node list
     const tickInterval = 10;
     const ticks = combinedNodes.filter((d, i) => i % tickInterval === 0);
-
 
     svg.append("g")
         .call(d3.axisLeft(sourceScale).tickValues(ticks))
@@ -503,6 +502,9 @@ function setupSVGandAxes(allNodes) {
     svg.append("g")
         .call(d3.axisRight(targetScale).tickValues(ticks))
         .attr("transform", `translate(${width},0)`);
+
+    // Call the function to draw gene density lines
+    drawGeneDensityLinesParallelPlot(svg, width, height, margin, combinedNodes, sourceScale, targetScale);
 
     return { svg, sourceScale, targetScale, width, height };
 }
@@ -730,16 +732,8 @@ function preprocessDataForHeatmap(rawData) {
 //////////////////////////////////////////////////////////////////
 ///////////////////////Heatmap Setting//////////////////////////////////////////////  
 //For Zoom Functionality//
-const zoom = d3.zoom()
-    .scaleExtent([1, 10])  // Limit zooming between 1x and 10x
-    .on('zoom', (event) => {
-        heatmapGroup.attr('transform', event.transform);  // Apply transformation
-    });
-
-
-  function createHeatmap(data) {
+function createHeatmap(data) {
     const tooltip = d3.select("#tooltipHeatmap");
-    // Select the visualization container and set up dimensions
     const container = d3.select('#visualization3');
     const margin = { top: 50, right: 50, bottom: 50, left: 50 };
     const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
@@ -749,35 +743,39 @@ const zoom = d3.zoom()
     container.selectAll('*').remove();
 
     // Define a color scale for the heatmap with a domain centered around the median weight
-    // Find the maximum weight value for scaling color intensity
     const maxWeight = d3.max(data, d => d.Weight);
-    const minWeight = d3.min(data, d => d.Weight); // Assuming minWeight is the minimum weight in your data
+    const minWeight = d3.min(data, d => d.Weight);
 
     // Define a custom color interpolator that will make the colors darker
     const colorInterpolator = t => {
-        // This function takes a value t between 0 and 1 and returns a color
-        // If you want to make the colors darker, you can adjust the range below
-        const start = 0.1; // Starting at 50% will make the colors generally darker
+        const start = 0.1; // Starting at 10% will make the colors generally darker
         return d3.interpolateReds(start + t * (1 - start));
     };
 
-// Define a continuous color scale using the custom interpolator
-const colorScale = d3.scaleSequential(colorInterpolator)
-    .domain([minWeight, maxWeight]);
-
+    // Define a continuous color scale using the custom interpolator
+    const colorScale = d3.scaleSequential(colorInterpolator)
+        .domain([minWeight, maxWeight]);
 
     // Create an SVG element inside the container for the heatmap
     const svg = container.append('svg')
-    .attr('width', width + margin.left + margin.right)
-    .attr('height', height + margin.top + margin.bottom)
-    .call(d3.zoom().scaleExtent([1, 10]).on('zoom', (event) => {
-        heatmapGroup.attr('transform', event.transform);
-    }))
-    .append('g')
-    .attr('transform', `translate(${margin.left},${margin.top})`);
+        .attr('width', width + margin.left + margin.right)
+        .attr('height', height + margin.top + margin.bottom);
+
+    // Define a clip path to confine the heatmap within the axes
+    svg.append('defs').append('clipPath')
+        .attr('id', 'clip')
+        .append('rect')
+        .attr('width', width)
+        .attr('height', height)
+        .attr('x', 0)
+        .attr('y', 0);
 
     const heatmapGroup = svg.append('g')
-        .attr('transform', `translate(${margin.left},${margin.top})`);
+        .attr('transform', `translate(${margin.left},${margin.top})`)
+        .attr('clip-path', 'url(#clip)');
+
+    // Initial log of the transformation values
+    console.log("Initial Transform: translate(", margin.left, ",", margin.top, ")");
 
     // Find the maximum value for both Source and Target in the data to set up dynamic domain
     const maxDataValue = d3.max(data, d => Math.max(d.Source, d.Target));
@@ -790,47 +788,87 @@ const colorScale = d3.scaleSequential(colorInterpolator)
         .domain([0, maxDataValue])
         .range([height, 0]);
 
-    // Calculate the size of the grid based on the new scale
-    // The grid size is dynamically determined by the maximum value
-    const gridSizeX = width / (maxDataValue + 1); // plus 1 to include the last grid at the end
-    const gridSizeY = height / (maxDataValue + 1); // plus 1 for the same reason
-// ...
+    // Append the axes inside the main SVG (not the heatmapGroup)
+    const xAxisGroup = svg.append("g")
+        .attr("transform", `translate(${margin.left},${margin.top + height})`)
+        .call(d3.axisBottom(xScale).tickFormat(d => `Bin ${d}`));
 
-    // Append the axes inside the heatmapGroup
-    heatmapGroup.append("g")
-        .attr("transform", `translate(0,${height})`)
-        .call(d3.axisBottom(xScale).tickFormat(d => `${d}MB`));
+    const yAxisGroup = svg.append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`)
+        .call(d3.axisLeft(yScale).tickFormat(d => `Bin ${d}`));
 
-    heatmapGroup.append("g")
-        .call(d3.axisLeft(yScale).tickFormat(d => `${d}MB`));
+    // Create heatmap squares without stroke to mimic the Python visualization
+    heatmapGroup.selectAll('rect')
+        .data(data)
+        .enter()
+        .append('rect')
+        .attr('x', d => xScale(d.Source)) // Use the xScale for positioning
+        .attr('y', d => yScale(d.Target)) // Use the yScale for positioning
+        .attr('width', width / maxDataValue) // Set width to gridSizeX
+        .attr('height', height / maxDataValue) // Set height to gridSizeY
+        .style('fill', d => colorScale(d.Weight))
+        .style('stroke-width', 0) // No stroke for a seamless appearance
+        .on('mouseover', function(e, d) {
+            tooltip.style('display', 'block');
+            tooltip.html(`Source: ${d.Source}<br>Target: ${d.Target}<br>Weight: ${d.Weight.toFixed(6)}`);
+        })
+        .on('mousemove', function(e) {
+            tooltip.style('left', (e.pageX + 10) + 'px')
+                .style('top', (e.pageY - 20) + 'px');
+        })
+        .on('mouseout', function() {
+            tooltip.style('display', 'none');
+        });
 
-// Calculate the size of the grid squares - make them square based on the smaller dimension
-const gridSize = Math.min(width / d3.max(data, d => d.Source + 1), height / d3.max(data, d => d.Target + 1));
+    // Call the function to draw gene density lines
+    drawGeneDensityLines(svg, width, height, margin, xScale, yScale);
 
-// Create heatmap squares without stroke to mimic the Python visualization
-// Create heatmap squares
-heatmapGroup.selectAll('rect')
-    .data(data)
-    .enter()
-    .append('rect')
-    .attr('x', d => xScale(d.Source)) // Use the xScale for positioning
-    .attr('y', d => yScale(d.Target)) // Use the yScale for positioning
-    .attr('width', gridSizeX) // Set width to gridSizeX
-    .attr('height', gridSizeY) // Set height to gridSizeY
-    .style('fill', d => colorScale(d.Weight))
-    .style('stroke-width', 0) // No stroke for a seamless appearance
-    .on('mouseover', function(e, d) {
-        tooltip.style('display', 'block');
-        tooltip.html(`Source: ${d.Source}<br>Target: ${d.Target}<br>Weight: ${d.Weight.toFixed(6)}`);
-    })
-    .on('mousemove', function(e) {
-        tooltip.style('left', (e.pageX + 10) + 'px')
-               .style('top', (e.pageY + 10) + 'px');
-    })
-    .on('mouseout', function() {
-        tooltip.style('display', 'none');
-    });
+    // Set up zoom functionality
+    const zoom = d3.zoom()
+        .scaleExtent([1, 10])  // Limit zooming between 1x and 10x
+        .translateExtent([[0, 0], [width, height]]) // Constrain panning and zooming within the visualization area
+        .extent([[0, 0], [width, height]])
+        .on('zoom', (event) => {
+            // Log the transformation values
+            console.log("Zoom Transform:", event.transform);
+
+            // Apply transformation to the heatmap group
+            if (event.transform.k === 1) {
+                // Reset transformation to initial state when zoom level is at minimum
+                heatmapGroup.attr('transform', `translate(${margin.left},${margin.top})`);
+                xAxisGroup.attr('transform', `translate(${margin.left},${margin.top + height})`);
+                yAxisGroup.attr('transform', `translate(${margin.left},${margin.top})`);
+            } else {
+                // Apply the zoom transformation
+                heatmapGroup.attr('transform', event.transform);
+                heatmapGroup.attr('stroke-width', 1 / event.transform.k);
+
+                // Update the axes based on the zoom level
+                const newXScale = event.transform.rescaleX(xScale);
+                const newYScale = event.transform.rescaleY(yScale);
+                xAxisGroup.call(d3.axisBottom(newXScale).tickFormat(d => `Bin ${d}`));
+                yAxisGroup.call(d3.axisLeft(newYScale).tickFormat(d => `Bin ${d}`));
+
+                // Update the gene density lines based on the zoom level
+                updateGeneDensityLines(svg, width, height, margin, newXScale, event.transform.k);
+            }
+        });
+
+    svg.call(zoom);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 //////Function for Highlighting the Heatmap based on node selection/////
 // Set to track selected nodes
@@ -842,10 +880,10 @@ function updateHeatmapHighlights(svg) {
     const highlightWidth = 3;  // Increased stroke width for better visibility
 
     // Optional: Define and append an SVG filter for a glow effect
-    const filter = svg.select("#glow-filter");
+    let filter = svg.select("#glow-filter");
     if (filter.empty()) {
         const defs = svg.append("defs");
-        const filter = defs.append("filter")
+        filter = defs.append("filter")
             .attr("id", "glow-filter")
             .attr("width", "200%")
             .attr("height", "200%");
@@ -874,12 +912,13 @@ function updateHeatmapHighlights(svg) {
     // Reapply highlights for all selected nodes
     selectedNodes.forEach(nodeId => {
         svg.selectAll('rect')
-            .filter(d => d.Source == nodeId || d.Target == nodeId)
+            .filter(d => d && (d.Source == nodeId || d.Target == nodeId))
             .style('stroke', highlightColor)
             .style('stroke-width', highlightWidth)
             .style("filter", "url(#glow-filter)");  // Apply the glow effect
     });
 }
+
 
 ////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
@@ -1040,5 +1079,152 @@ function onWindowResize() {
                 selectedNode.material.emissive.setHex(0xff0000);
                 console.log("Clicked on node: " + selectedNode.name); // Should log when a node is clicked
             }
+        }
+        
+        //// Gene Density Function///
+        function fetchGeneDensityData(filePath) {
+            fetch(filePath)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Store the gene density data for later use
+                    window.geneDensityData = data;
+                })
+                .catch(error => {
+                    console.error("Error fetching gene density data:", error);
+                });
+        }
+
+        function drawGeneDensityLines(svg, width, height, margin, xScale, yScale) {
+            // Ensure gene density data is available
+            if (!window.geneDensityData) {
+                console.error("Gene density data not available");
+                return;
+            }
+        
+            const colorScale = d3.scaleSequential(d3.interpolateReds)
+                .domain([0, d3.max(window.geneDensityData, d => d.density)]);
+        
+            // Create a group for the gene density lines
+            const geneDensityGroup = svg.append('g')
+                .attr('class', 'gene-density-group')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+        
+            // Add a tooltip div. Initially hidden.
+            const tooltip = d3.select('body').append('div')
+                .attr('class', 'tooltip')
+                .style('position', 'absolute')
+                .style('padding', '6px')
+                .style('background', 'lightgray')
+                .style('border', '1px solid #333')
+                .style('border-radius', '4px')
+                .style('pointer-events', 'none')
+                .style('display', 'none');
+        
+            // Draw the gene density line at the bottom
+            geneDensityGroup.selectAll('.density-line-bottom')
+                .data(window.geneDensityData)
+                .enter()
+                .append('rect')
+                .attr('class', 'density-line-bottom')
+                .attr('x', d => xScale(d.node))
+                .attr('y', height + margin.bottom / 4) // Slightly above the x-axis
+                .attr('width', width / window.geneDensityData.length) // Adjust width to fit within the x-axis
+                .attr('height', margin.bottom / 4) // Height of the density line
+                .attr('fill', d => colorScale(d.density))
+                .on('mouseover', function(e, d) {
+                    tooltip.style('display', 'block');
+                    tooltip.html(`Node: ${d.node}<br>Density: ${d.density}`);
+                })
+                .on('mousemove', function(e) {
+                    tooltip.style('left', (e.pageX + 10) + 'px')
+                        .style('top', (e.pageY - 20) + 'px');
+                })
+                .on('mouseout', function() {
+                    tooltip.style('display', 'none');
+                });
+        }
+        
+        function updateGeneDensityLines(svg, width, height, margin, newXScale, zoomLevel) {
+            // Ensure gene density data is available
+            if (!window.geneDensityData) {
+                console.error("Gene density data not available");
+                return;
+            }
+        
+            const colorScale = d3.scaleSequential(d3.interpolateReds)
+                .domain([0, d3.max(window.geneDensityData, d => d.density)]);
+        
+            // Update the gene density line at the bottom based on the zoom level
+            svg.selectAll('.density-line-bottom')
+                .data(window.geneDensityData)
+                .attr('x', d => newXScale(d.node))
+                .attr('width', zoomLevel === 1 ? width / window.geneDensityData.length : newXScale(d.node + 1) - newXScale(d.node));
+        }
+        
+        
+        
+        ///////////Gene density drawing for Parallel Plot/////////////
+        function drawGeneDensityLinesParallelPlot(svg, width, height, margin, combinedNodes, sourceScale, targetScale) {
+            // Ensure gene density data is available
+            if (!window.geneDensityData) {
+                console.error("Gene density data not available");
+                return;
+            }
+        
+            const colorScale = d3.scaleSequential(d3.interpolateReds)
+                .domain([0, d3.max(window.geneDensityData, d => d.density)]);
+        
+            const tooltip = d3.select("#tooltipParallelPlot");
+        
+            // Draw gene density line along the left axis
+            svg.selectAll(".density-line-left")
+                .data(window.geneDensityData)
+                .enter()
+                .append("rect")
+                .attr("class", "density-line-left")
+                .attr("x", -margin.left / 2)
+                .attr("y", d => sourceScale(d.node))
+                .attr("width", margin.left / 2)
+                .attr("height", height / combinedNodes.length)
+                .style("fill", d => colorScale(d.density))
+                .on('mouseover', function (e, d) {
+                    tooltip.style('display', 'block')
+                           .html(`Node: ${d.node}<br>Density: ${d.density}`);
+                })
+                .on('mousemove', function (e) {
+                    tooltip.style('left', (e.pageX + 10) + 'px')
+                           .style('top', (e.pageY - 20) + 'px');
+                })
+                .on('mouseout', function () {
+                    tooltip.style('display', 'none');
+                });
+        
+            // Draw gene density line along the right axis
+            svg.selectAll(".density-line-right")
+                .data(window.geneDensityData)
+                .enter()
+                .append("rect")
+                .attr("class", "density-line-right")
+                .attr("x", width)
+                .attr("y", d => targetScale(d.node))
+                .attr("width", margin.right / 2)
+                .attr("height", height / combinedNodes.length)
+                .style("fill", d => colorScale(d.density))
+                .on('mouseover', function (e, d) {
+                    tooltip.style('display', 'block')
+                           .html(`Node: ${d.node}<br>Density: ${d.density}`);
+                })
+                .on('mousemove', function (e) {
+                    tooltip.style('left', (e.pageX + 10) + 'px')
+                           .style('top', (e.pageY - 20) + 'px');
+                })
+                .on('mouseout', function () {
+                    tooltip.style('display', 'none');
+                });
         }
         
