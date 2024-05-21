@@ -61,23 +61,42 @@ function addDynamicEventListeners() {
             console.log("Available node positions before drawing 2D edges:", nodePositions);
             drawEdges2D(filteredEdges, context);
 
-            ///Heatmap Visualization///
-            // Update the global set of selected nodes based on the current checkbox state
+            // Heatmap Visualization
             selectedNodes.clear();  // Clear the set and add all currently selected nodes
             selectedNodeIds.forEach(id => selectedNodes.add(id));
 
             const svg = d3.select('#visualization3').select('svg');
             updateHeatmapHighlights(svg);
 
-            //For Parallel Plot
+            // For Parallel Plot
             setupAndDrawParallelPlot(edgeDataPath, selectedNodeIds);
-
         });
-        
     });
-    
-    
+
+    // Visualize Range button functionality (only updates heatmap)
+    document.getElementById('visualize-range').addEventListener('click', function() {
+        const fromBin = parseInt(document.getElementById('fromBin').value);
+        const toBin = parseInt(document.getElementById('toBin').value);
+
+        if (isNaN(fromBin) || isNaN(toBin) || fromBin > toBin) {
+            alert("Please enter a valid range of bin numbers.");
+            return;
+        }
+
+        const selectedNodeIds = [];
+        for (let i = fromBin; i <= toBin; i++) {
+            selectedNodeIds.push(i.toString());
+        }
+
+        // Update the heatmap
+        selectedNodes.clear();  // Clear the set and add all currently selected nodes
+        selectedNodeIds.forEach(id => selectedNodes.add(id));
+
+        const svg = d3.select('#visualization3').select('svg');
+        updateHeatmapHighlights(svg);
+    });
 }
+
 
 
 
@@ -544,9 +563,61 @@ function drawLinks({ svg, sourceScale, targetScale, data, width }) {
     .on("mouseout", function() {
         d3.select("#tooltip").style("display", "none");
     });
+
+    // Create a legend for color representation of each source
+    const legend = svg.append("g")
+        .attr("class", "legend")
+        .attr("transform", "translate(10,10)");
+
+    const legendItems = legend.selectAll(".legend-item")
+        .data(colorScale.domain())
+        .enter()
+        .append("g")
+        .attr("class", "legend-item")
+        .attr("transform", (d, i) => `translate(0, ${i * 20})`);
+
+    legendItems.append("rect")
+        .attr("x", 0)
+        .attr("width", 18)
+        .attr("height", 18)
+        .style("fill", d => colorScale(d));
+
+    legendItems.append("text")
+        .attr("x", 24)
+        .attr("y", 9)
+        .attr("dy", "0.35em")
+        .text(d => `Source: ${d}`)
+        .style("font-size", "12px");
+
+    // Tooltip for legend items
+    legendItems.on("mouseover", function(event, d) {
+        d3.select("#tooltip")
+          .style("display", "block")
+          .style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY + 10) + "px")
+          .html(`Source: ${d}<br>Color: ${colorScale(d)}`);
+    })
+    .on("mouseout", function() {
+        d3.select("#tooltip").style("display", "none");
+    });
+
+    // Add the opacity control slider functionality
+    addOpacityControl();
 }
 
+//Control Opacity Function for Parallel Plot
+function addOpacityControl() {
+    const slider = document.getElementById('linkOpacitySlider');
+    const sliderValue = document.getElementById('linkOpacityValue');
 
+    slider.addEventListener('input', function() {
+        const opacity = slider.value / 100;
+        sliderValue.textContent = `${slider.value}%`;
+        d3.selectAll('path').attr('opacity', opacity);
+    });
+}
+
+///////////////////////////////////////////////////////
 function clearVisualizationScenes() {
     while(scene.children.length > 0) { 
         scene.remove(scene.children[0]); 
@@ -877,7 +948,7 @@ let selectedNodes = new Set();
 function updateHeatmapHighlights(svg) {
     // Define a vibrant stroke color and increased stroke width
     const highlightColor = '#ff5722';  // Example: bright orange
-    const highlightWidth = 3;  // Increased stroke width for better visibility
+    const highlightWidth = 2;  // Stroke width for better visibility
 
     // Optional: Define and append an SVG filter for a glow effect
     let filter = svg.select("#glow-filter");
@@ -907,7 +978,8 @@ function updateHeatmapHighlights(svg) {
     svg.selectAll('rect')
         .style('stroke', null)
         .style('stroke-width', 0)
-        .style("filter", null);  // Remove any existing glow effect
+        .style("filter", null)
+        .style('opacity', 1);  // Reset opacity
 
     // Reapply highlights for all selected nodes
     selectedNodes.forEach(nodeId => {
@@ -915,9 +987,12 @@ function updateHeatmapHighlights(svg) {
             .filter(d => d && (d.Source == nodeId || d.Target == nodeId))
             .style('stroke', highlightColor)
             .style('stroke-width', highlightWidth)
-            .style("filter", "url(#glow-filter)");  // Apply the glow effect
+            .style("filter", "url(#glow-filter)")  // Apply the glow effect
+            .style('opacity', 0.5);  // Set opacity to make the highlight transparent
     });
 }
+
+
 
 
 ////////////////////////////////////////////////////////////
@@ -1227,4 +1302,58 @@ function onWindowResize() {
                     tooltip.style('display', 'none');
                 });
         }
+        
+        ///////////Functionality for Clear Button/////
+        function clearVisualizations() {
+            // Clear 3D scene
+            while (scene.children.length > 0) { 
+                scene.remove(scene.children[0]); 
+            }
+            renderer.render(scene, camera);
+        
+            // Clear 2D canvas
+            const canvas2D = document.getElementById('canvas2D');
+            if (canvas2D) {
+                const context = canvas2D.getContext('2d');
+                context.clearRect(0, 0, canvas2D.width, canvas2D.height);
+            }
+        
+            // Clear heatmap visualization
+            const heatmapSVG = d3.select('#visualization3').select('svg');
+            if (!heatmapSVG.empty()) {
+                heatmapSVG.selectAll('*').remove();
+            }
+        
+            // Clear parallel plot visualization
+            const parallelPlotSVG = d3.select('#visualization4').select('svg');
+            if (!parallelPlotSVG.empty()) {
+                parallelPlotSVG.selectAll('*').remove();
+            }
+        
+            // Reset dataset selector
+            document.getElementById('dataset-selector').value = '';
+        
+            // Reset node checkboxes
+            const nodeCheckboxes = document.querySelectorAll('#node-checkboxes input[type="checkbox"]');
+            nodeCheckboxes.forEach(checkbox => checkbox.checked = false);
+        
+            // Clear other selections and controls if any
+            // Reset slider value
+            const edgeWeightSlider = document.getElementById('edgeWeightSlider');
+            edgeWeightSlider.value = 100;
+            document.getElementById('edgeWeightValue').textContent = '100%';
+        
+            // Reset bin range inputs
+            document.getElementById('fromBin').value = '';
+            document.getElementById('toBin').value = '';
+        
+            // Clear any remaining tooltip
+            const tooltips = document.querySelectorAll('.tooltip');
+            tooltips.forEach(tooltip => tooltip.style.display = 'none');
+        
+            // Optionally, reinitialize nodes (without edges)
+            // fetchNodesFromJson('WT_BS_Node_3D.json'); // Uncomment if you want to reload nodes
+        }
+        
+        document.getElementById('clear-visualizations').addEventListener('click', clearVisualizations);
         
