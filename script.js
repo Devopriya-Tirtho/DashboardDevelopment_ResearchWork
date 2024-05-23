@@ -486,9 +486,9 @@ function setupSVGandAxes(allNodes) {
     const combinedNodes = [...new Set([...allNodes.sources, ...allNodes.targets])].sort((a, b) => a - b);
 
     const container = d3.select("#visualization4");
-    const margin = { top: 30, right: 30, bottom: 30, left: 30 },
-         totalWidth = 700,
-         totalHeight = 630,
+    const margin = { top: 30, right: 30, bottom: 50, left: 30 },
+         totalWidth = container.node().getBoundingClientRect().width,
+         totalHeight = container.node().getBoundingClientRect().height,
          width = totalWidth - margin.left - margin.right,
          height = totalHeight - margin.top - margin.bottom;
 
@@ -514,24 +514,25 @@ function setupSVGandAxes(allNodes) {
     const tickInterval = 10;
     const ticks = combinedNodes.filter((d, i) => i % tickInterval === 0);
 
+    // Call the function to draw gene density lines first
+    drawGeneDensityLinesParallelPlot(svg, width, height, margin, combinedNodes, sourceScale, targetScale);
+
+    // Move the left axis further left
     svg.append("g")
         .call(d3.axisLeft(sourceScale).tickValues(ticks))
-        .attr("transform", "translate(0,0)");
+        .attr("transform", `translate(${25},0)`);  // Adjusted translation for left axis
     
+    // Move the right axis a bit left
     svg.append("g")
         .call(d3.axisRight(targetScale).tickValues(ticks))
-        .attr("transform", `translate(${width},0)`);
-
-    // Call the function to draw gene density lines
-    drawGeneDensityLinesParallelPlot(svg, width, height, margin, combinedNodes, sourceScale, targetScale);
+        .attr("transform", `translate(${width - 25},0)`);  // Adjusted translation for right axis
 
     return { svg, sourceScale, targetScale, width, height };
 }
 
 
-
-
-function drawLinks({ svg, sourceScale, targetScale, data, width }) {
+///Function for drawing links//////
+function drawLinks({ svg, sourceScale, targetScale, data, width, height }) {
     svg.selectAll("path").remove();
 
     const colorScale = d3.scaleOrdinal(d3.schemeCategory10)
@@ -545,7 +546,7 @@ function drawLinks({ svg, sourceScale, targetScale, data, width }) {
        .attr("d", d => {
            const sourceY = sourceScale(d.Source);
            const targetY = targetScale(d.Target);
-           return `M0,${sourceY} L${width},${targetY}`;
+           return `M20,${sourceY} L${width - 20},${targetY}`;  // Adjusted to start and end within the margins
        })
        .attr("stroke", d => colorScale(d.Source))
        .attr("stroke-width", 2)
@@ -565,29 +566,30 @@ function drawLinks({ svg, sourceScale, targetScale, data, width }) {
     });
 
     // Create a legend for color representation of each source
-    const legend = svg.append("g")
-        .attr("class", "legend")
-        .attr("transform", "translate(10,10)");
+// Create a legend for color representation of each source
+const legend = svg.append("g")
+    .attr("class", "legend")
+    .attr("transform", "translate(10,355)");  // Adjusted to place at the desired position
 
-    const legendItems = legend.selectAll(".legend-item")
-        .data(colorScale.domain())
-        .enter()
-        .append("g")
-        .attr("class", "legend-item")
-        .attr("transform", (d, i) => `translate(0, ${i * 20})`);
+const legendItems = legend.selectAll(".legend-item")
+    .data(colorScale.domain())
+    .enter()
+    .append("g")
+    .attr("class", "legend-item")
+    .attr("transform", (d, i) => `translate(${i * 80}, 0)`);  // Adjusted to place items horizontally
 
-    legendItems.append("rect")
-        .attr("x", 0)
-        .attr("width", 18)
-        .attr("height", 18)
-        .style("fill", d => colorScale(d));
+legendItems.append("rect")
+    .attr("x", 0)
+    .attr("width", 12)  // Adjusted width
+    .attr("height", 12)  // Adjusted height
+    .style("fill", d => colorScale(d));
 
-    legendItems.append("text")
-        .attr("x", 24)
-        .attr("y", 9)
-        .attr("dy", "0.35em")
-        .text(d => `Source: ${d}`)
-        .style("font-size", "12px");
+legendItems.append("text")
+    .attr("x", 16)
+    .attr("y", 6)
+    .attr("dy", "0.35em")
+    .text(d => `Source: ${d}`)
+    .style("font-size", "10px");  // Adjusted font size
 
     // Tooltip for legend items
     legendItems.on("mouseover", function(event, d) {
@@ -604,6 +606,10 @@ function drawLinks({ svg, sourceScale, targetScale, data, width }) {
     // Add the opacity control slider functionality
     addOpacityControl();
 }
+
+
+
+
 
 //Control Opacity Function for Parallel Plot
 function addOpacityControl() {
@@ -660,22 +666,24 @@ canvas2D.id = 'canvas2D'; // Assign an ID to the canvas for easy reference
 vis2Container.appendChild(canvas2D);
 
 
-
 function draw2DVisualization(data) {
-
     const tooltip = document.getElementById('tooltip2D');
-
-    ////
 
     const canvas = document.getElementById('canvas2D');
     if (!canvas) {
         console.error("Canvas element not found!");
         return;
     }
+
     const context = canvas.getContext('2d');
 
+    // Adjust canvas size to fit within the parent container
+    const container = document.getElementById('visualization2');
+    const containerRect = container.getBoundingClientRect();
+    canvas.width = containerRect.width;
+    canvas.height = containerRect.height;
+
     // Modify scaleX and scaleY calculations to add a buffer for margins
-    // Define constants for canvas dimensions and node radius
     const nodeRadius = 5;
     const padding = 20; // Padding from the canvas edges
 
@@ -683,28 +691,44 @@ function draw2DVisualization(data) {
     const scaleX = (canvas.width - 2 * padding) / (getRange(data, 'x'));
     const scaleY = (canvas.height - 2 * padding) / (getRange(data, 'y'));
 
+    // Determine the overall scale factor to fit the nodes within the canvas
+    const scaleFactor = 0.8; // Adjust this factor as needed to fit the nodes within the canvas
+
     context.clearRect(0, 0, canvas.width, canvas.height);
     nodePositions = {}; // Reset positions map each time nodes are drawn
+
+    // Sort nodes by numeric ID
+    const sortedData = data.slice().sort((a, b) => parseInt(a.id.replace(/[^\d]/g, '')) - parseInt(b.id.replace(/[^\d]/g, '')));
+    const startNode = sortedData[0];
+    const endNode = sortedData[sortedData.length - 1];
 
     data.forEach(node => {
         const numericId = node.id.replace(/[^\d]/g, '');
         // Adjust node positions to include padding and ensure they stay within the canvas
-        const x = padding + (node.x - getMin(data, 'x')) * scaleX;
-        const y = padding + (node.y - getMin(data, 'y')) * scaleY;
-    
+        const x = padding + (node.x - getMin(data, 'x')) * scaleX * scaleFactor;
+        const y = padding + (node.y - getMin(data, 'y')) * scaleY * scaleFactor;
+
         nodePositions[numericId] = { x, y };
-    
+
         context.beginPath();
         context.arc(x, y, nodeRadius, 0, Math.PI * 2, true);
+
+        // Set color based on whether the node is the start or end node
+        if (node === startNode) {
+            context.fillStyle = "green"; // Start node color
+        } else if (node === endNode) {
+            context.fillStyle = "blue"; // End node color
+        } else {
+            context.fillStyle = "red"; // Default node color
+        }
+
         context.shadowBlur = 0.5;
         context.shadowColor = "rgba(255, 0, 0, 0.5)"; // Red glow
-        context.fillStyle = "red"; // Node color
         context.fill();
         context.shadowBlur = 0; // Reset shadow blur for other elements
     });
-    
 
-        // Function to check if a point is inside a node's circle
+    // Function to check if a point is inside a node's circle
     function isPointInNode(x, y, nodeX, nodeY, radius) {
         return Math.sqrt((x - nodeX) ** 2 + (y - nodeY) ** 2) < radius;
     }
@@ -715,12 +739,12 @@ function draw2DVisualization(data) {
         const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
         let foundNode = false;
 
-        //context.clearRect(0, 0, canvas.width, canvas.height); // Clear and redraw for hover effects
+        context.clearRect(0, 0, canvas.width, canvas.height); // Clear and redraw for hover effects
         data.forEach(node => {
             const numericId = node.id.replace(/[^\d]/g, '');
             const x = nodePositions[numericId].x;
             const y = nodePositions[numericId].y;
-            if (isPointInNode(mouseX, mouseY, x, y, 10)) { // Node radius is 10
+            if (isPointInNode(mouseX, mouseY, x, y, nodeRadius)) { // Node radius is 5
                 tooltip.style.display = 'block';
                 tooltip.style.left = `${e.clientX + 10}px`;
                 tooltip.style.top = `${e.clientY + 10}px`;
@@ -730,10 +754,17 @@ function draw2DVisualization(data) {
                 context.fillStyle = 'yellow'; // Change color for highlight
                 foundNode = true;
             } else {
-                context.fillStyle = getColorForChID(String(node.ChID));
+                // Reset to original color
+                if (node === startNode) {
+                    context.fillStyle = "green"; // Start node color
+                } else if (node === endNode) {
+                    context.fillStyle = "blue"; // End node color
+                } else {
+                    context.fillStyle = "red"; // Default node color
+                }
             }
             context.beginPath();
-            context.arc(x, y, nodeRadius, 0, Math.PI * 2, true); // Node radius is 10
+            context.arc(x, y, nodeRadius, 0, Math.PI * 2, true); // Node radius is 5
             context.fill();
         });
 
@@ -746,6 +777,9 @@ function draw2DVisualization(data) {
         tooltip.style.display = 'none'; // Hide tooltip when not hovering over canvas
     });
 }
+
+
+
 
 
 // Helper functions to get the range and minimum value of nodes
@@ -921,7 +955,7 @@ function createHeatmap(data) {
                 yAxisGroup.call(d3.axisLeft(newYScale).tickFormat(d => `Bin ${d}`));
 
                 // Update the gene density lines based on the zoom level
-                updateGeneDensityLines(svg, width, height, margin, newXScale, event.transform.k);
+                //updateGeneDensityLines(svg, width, height, margin, newXScale, event.transform.k);
             }
         });
 
@@ -1060,21 +1094,49 @@ function onWindowResize() {
 
     //For Creating Nodes for 3d Visualization
     function createNodes(nodeData) {
+        // Clear existing nodes in the scene
         while(scene.children.length > 0) { 
             scene.remove(scene.children[0]); 
         }
     
+        // Sort nodes by numeric ID
+        const sortedData = nodeData.slice().sort((a, b) => parseInt(a.id.replace(/[^\d]/g, '')) - parseInt(b.id.replace(/[^\d]/g, '')));
+        const startNode = sortedData[0];
+        const endNode = sortedData[sortedData.length - 1];
+    
         nodeData.forEach(node => {
             const numericId = node.id.replace(/[^\d]/g, ''); // Assumes node.id is like 'Node1'
             const color = getColorForChID(String(node.ChID));
-            // Set up the material with a glowing red color
-            const nodeMaterial = new THREE.MeshStandardMaterial({
-                color: 0xFF5733, // A vibrant red color
-                emissive: 0xFF5733, // Same color for emissive to create a glow effect
-                emissiveIntensity: 1, // Increased emissive intensity
-                roughness: 0.1, // A low roughness to make the material shinier
-                metalness: 0.5  // Increased metalness for a metallic sheen
-            });
+    
+            let nodeMaterial;
+    
+            // Set up the material with different colors for start and end nodes
+            if (node === startNode) {
+                nodeMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x00FF00, // Green color for start node
+                    emissive: 0x00FF00, // Same color for emissive to create a glow effect
+                    emissiveIntensity: 1,
+                    roughness: 0.1,
+                    metalness: 0.5
+                });
+            } else if (node === endNode) {
+                nodeMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x0000FF, // Blue color for end node
+                    emissive: 0x0000FF,
+                    emissiveIntensity: 1,
+                    roughness: 0.1,
+                    metalness: 0.5
+                });
+            } else {
+                nodeMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xFF5733, // A vibrant red color for other nodes
+                    emissive: 0xFF5733,
+                    emissiveIntensity: 1,
+                    roughness: 0.1,
+                    metalness: 0.5
+                });
+            }
+    
             // Reduce the node size
             const geometry = new THREE.SphereGeometry(0.5, 32, 32); // Node radius set to 0.5
             const sphere = new THREE.Mesh(geometry, nodeMaterial);
@@ -1085,6 +1147,7 @@ function onWindowResize() {
     
         renderer.render(scene, camera);
     }
+    
     
     //Updating Tooltip for 3d Visualization
     function updateTooltip(event, node) {
@@ -1207,7 +1270,7 @@ function onWindowResize() {
                 .append('rect')
                 .attr('class', 'density-line-bottom')
                 .attr('x', d => xScale(d.node))
-                .attr('y', height + margin.bottom / 4) // Slightly above the x-axis
+                .attr('y', height + margin.bottom / 2) // Slightly above the x-axis
                 .attr('width', width / window.geneDensityData.length) // Adjust width to fit within the x-axis
                 .attr('height', margin.bottom / 4) // Height of the density line
                 .attr('fill', d => colorScale(d.density))
@@ -1223,25 +1286,29 @@ function onWindowResize() {
                     tooltip.style('display', 'none');
                 });
         }
+
         
-        function updateGeneDensityLines(svg, width, height, margin, newXScale, zoomLevel) {
-            // Ensure gene density data is available
-            if (!window.geneDensityData) {
-                console.error("Gene density data not available");
-                return;
-            }
+        ///////////////////////////////////////////////////////////////////////////////////////
+        // Function for updating gene density line with zoom in or out in heatmap visualization
+
+        // function updateGeneDensityLines(svg, width, height, margin, newXScale, zoomLevel) {
+        //     // Ensure gene density data is available
+        //     if (!window.geneDensityData) {
+        //         console.error("Gene density data not available");
+        //         return;
+        //     }
         
-            const colorScale = d3.scaleSequential(d3.interpolateReds)
-                .domain([0, d3.max(window.geneDensityData, d => d.density)]);
+        //     const colorScale = d3.scaleSequential(d3.interpolateReds)
+        //         .domain([0, d3.max(window.geneDensityData, d => d.density)]);
         
-            // Update the gene density line at the bottom based on the zoom level
-            svg.selectAll('.density-line-bottom')
-                .data(window.geneDensityData)
-                .attr('x', d => newXScale(d.node))
-                .attr('width', zoomLevel === 1 ? width / window.geneDensityData.length : newXScale(d.node + 1) - newXScale(d.node));
-        }
+        //     // Update the gene density line at the bottom based on the zoom level
+        //     svg.selectAll('.density-line-bottom')
+        //         .data(window.geneDensityData)
+        //         .attr('x', d => newXScale(d.node))
+        //         .attr('width', zoomLevel === 1 ? width / window.geneDensityData.length : newXScale(d.node + 1) - newXScale(d.node));
+        // }
         
-        
+        /////////////////////////////////////////////////////////////////////////////////////////////////////
         
         ///////////Gene density drawing for Parallel Plot/////////////
         function drawGeneDensityLinesParallelPlot(svg, width, height, margin, combinedNodes, sourceScale, targetScale) {
@@ -1256,15 +1323,15 @@ function onWindowResize() {
         
             const tooltip = d3.select("#tooltipParallelPlot");
         
-            // Draw gene density line along the left axis
+            // Draw gene density line along the left axis (shifted left)
             svg.selectAll(".density-line-left")
                 .data(window.geneDensityData)
                 .enter()
                 .append("rect")
                 .attr("class", "density-line-left")
-                .attr("x", -margin.left / 2)
+                .attr("x", -20) // Position it outside the left margin
                 .attr("y", d => sourceScale(d.node))
-                .attr("width", margin.left / 2)
+                .attr("width", 20)
                 .attr("height", height / combinedNodes.length)
                 .style("fill", d => colorScale(d.density))
                 .on('mouseover', function (e, d) {
@@ -1279,15 +1346,15 @@ function onWindowResize() {
                     tooltip.style('display', 'none');
                 });
         
-            // Draw gene density line along the right axis
+            // Draw gene density line along the right axis (shifted right)
             svg.selectAll(".density-line-right")
                 .data(window.geneDensityData)
                 .enter()
                 .append("rect")
                 .attr("class", "density-line-right")
-                .attr("x", width)
+                .attr("x", width) // Position it at the right edge of the plot
                 .attr("y", d => targetScale(d.node))
-                .attr("width", margin.right / 2)
+                .attr("width", 10)
                 .attr("height", height / combinedNodes.length)
                 .style("fill", d => colorScale(d.density))
                 .on('mouseover', function (e, d) {
