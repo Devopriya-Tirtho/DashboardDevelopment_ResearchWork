@@ -7,6 +7,10 @@ import { RoughnessMipmapper } from 'https://cdn.jsdelivr.net/npm/three@0.124/exa
 //For 3d vis nodehighlight interaction
 var selectedNode = null;
 
+//For range visualization
+let selectedNodeIds = [];
+let selectedNodeIdsForRange = [];
+
 // Defining these globally
 var scene, camera, renderer, controls;
 // Define nodePositions globally
@@ -50,52 +54,81 @@ function addDynamicEventListeners() {
 
     // Visualize button functionality
     document.getElementById('visualize-nodes').addEventListener('click', function() {
+        selectedNodeIdsForRange = []; // Reset the range selection
+    
         const selectedNodeIds = Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked'))
-                                     .map(checkbox => checkbox.dataset.nodeId);
+                                    .map(checkbox => checkbox.dataset.nodeId);
         const selectedDataset = document.getElementById('dataset-selector').value;
         const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed.json' : 'Other_Dataset_Edge.json';
-    
+        
         fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, function(filteredEdges) {
             createEdges3D(filteredEdges);  // Draw 3D edges
             const context = document.getElementById('canvas2D').getContext('2d');
-            console.log("Available node positions before drawing 2D edges:", nodePositions);
             drawEdges2D(filteredEdges, context);
-
+    
             // Heatmap Visualization
             selectedNodes.clear();  // Clear the set and add all currently selected nodes
             selectedNodeIds.forEach(id => selectedNodes.add(id));
-
+    
             const svg = d3.select('#visualization3').select('svg');
-            updateHeatmapHighlights(svg);
-
+            updateHeatmapHighlights(svg, false);  // Pass false to indicate node highlighting
+    
             // For Parallel Plot
             setupAndDrawParallelPlot(edgeDataPath, selectedNodeIds);
         });
     });
-
-    // Visualize Range button functionality (only updates heatmap)
+    
+    ///For handling the visualize-range option//
     document.getElementById('visualize-range').addEventListener('click', function() {
         const fromBin = parseInt(document.getElementById('fromBin').value);
         const toBin = parseInt(document.getElementById('toBin').value);
-
+    
         if (isNaN(fromBin) || isNaN(toBin) || fromBin > toBin) {
             alert("Please enter a valid range of bin numbers.");
             return;
         }
-
-        const selectedNodeIds = [];
+    
+        selectedNodeIdsForRange = [];
         for (let i = fromBin; i <= toBin; i++) {
-            selectedNodeIds.push(i.toString());
+            selectedNodeIdsForRange.push(i.toString());
         }
-
+    
         // Update the heatmap
         selectedNodes.clear();  // Clear the set and add all currently selected nodes
-        selectedNodeIds.forEach(id => selectedNodes.add(id));
-
+        selectedNodeIdsForRange.forEach(id => selectedNodes.add(id));
+    
         const svg = d3.select('#visualization3').select('svg');
-        updateHeatmapHighlights(svg);
+        updateHeatmapHighlights(svg, true);  // Pass true to indicate range highlighting
+    
+        // Fetch and filter edges, then update the visualizations
+        const selectedDataset = document.getElementById('dataset-selector').value;
+        const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed.json' : 'Other_Dataset_Edge.json';
+        const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_3D.json' : 'Other_Dataset_Node_data.json';
+    
+        fetchAndFilterEdgeData(edgeDataPath, selectedNodeIdsForRange, function(filteredEdges) {
+            clearEdges3D();
+            createEdges3D(filteredEdges);
+    
+            const canvas = document.getElementById('canvas2D');
+            const context = canvas.getContext('2d');
+            fetch(nodeDataPath).then(response => response.json()).then(nodeData => {
+                clearOnlyEdges2D(context, canvas, nodeData);
+                drawEdges2D(filteredEdges, context);
+            });
+    
+            // Update the parallel plot
+            updateParallelPlot(edgeDataPath, selectedNodeIdsForRange, filteredEdges.length);
+        });
     });
+    
+
+    
+    
+    
+    
+    
 }
+
 
 
 
@@ -119,48 +152,61 @@ document.addEventListener('DOMContentLoaded', function() {
     const datasetSelector = document.getElementById('dataset-selector');
     datasetSelector.addEventListener('change', function() {
         const selectedDataset = datasetSelector.value;
-        switch (selectedDataset) {
-            case 'WT_BS':
-                clearVisualizationScenes(); // Clears all scenes
-                fetchNodesFromJson('WT_BS_Node_3D.json'); // Specific for 3D visualizations
-                fetchProcessedEdgeData('WT_BS_Edge_processed.json');
-                setupParallelPlotData('WT_BS_Edge_processed.json'); // Parallel plot specific data
-                fetchGeneDensityData('WT_BS_gene_density.json'); // Fetch gene density data
-                break;
-            //case 'Other_Dataset': // Example of another dataset
-                //clearVisualizationScenes();
-                //fetchNodesFromJson('Other_Dataset_Node_3D.json');
-                //setupParallelPlotData('Other_Dataset_Edge_processed.json');
-                //break;
-            // Add more cases as needed
+
+        // Show loading spinner
+        document.getElementById('loadingSpinner').style.display = 'block';
+
+        const fetchData = async () => {
+            try {
+                switch (selectedDataset) {
+                    case 'WT_BS':
+                        clearVisualizationScenes(); // Clears all scenes
+                        await fetchNodesFromJson('WT_BS_Node_3D.json'); // Specific for 3D visualizations
+                        await fetchProcessedEdgeData('WT_BS_Edge_processed.json');
+                        await setupParallelPlotData('WT_BS_Edge_processed.json'); // Parallel plot specific data
+                        break;
+                    // case 'Other_Dataset': // Example of another dataset
+                    //     clearVisualizationScenes();
+                    //     await fetchNodesFromJson('Other_Dataset_Node_3D.json');
+                    //     await setupParallelPlotData('Other_Dataset_Edge_processed.json');
+                    //     break;
+                    // Add more cases as needed
+                }
+            } catch (error) {
+                console.error("Error loading data:", error);
+            } finally {
+                // Hide loading spinner
+                document.getElementById('loadingSpinner').style.display = 'none';
+            }
+        };
+
+        fetchData();
+
+        // Fetch gene density data separately
+        if (selectedDataset === 'WT_BS') {
+            fetchGeneDensityData('WT_BS_gene_density.json');
         }
     });
 
-    function fetchNodesFromJson(filePath) {
-        console.log("Flag");
-        fetch(filePath)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                //console.log("Data loaded:", data);
-                updateNodeDropdown(data); // Update the dropdown with the new data
-                //createNodes(data);       // Create nodes for the 3D visualization
 
-                ///For 2d Vis////
-                //console.log("Data loaded:", data);
-                createNodes(data); // For 3D visualization
-                draw2DVisualization(data); // For 2D visualization
-                //drawParallelPlot(data);    // New function for parallel plot visualization
-            })
-            .catch(error => {
-                console.error("Error fetching nodes:", error);
-            });
+    async function fetchNodesFromJson(filePath) {
+        try {
+            console.log("Fetching nodes from JSON...");
+            const response = await fetch(filePath);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            console.log("Nodes data fetched successfully:", data);
+            updateNodeDropdown(data); // Update the dropdown with the new data
+            createNodes(data); // For 3D visualization
+            draw2DVisualization(data); // For 2D visualization
+        } catch (error) {
+            console.error("Error fetching nodes:", error);
+        }
     }
-    
+
+
     // For Clicking in 3d Vis
     console.log("Adding event listener to", renderer.domElement);
     renderer.domElement.addEventListener('click', onCanvasClick, false);
@@ -206,6 +252,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     addDynamicEventListeners();  // Initialize all event listeners
     setupDropdownToggle();       // Setup dropdown toggle behavior if defined
+    addOpacityControl();  // Initialize opacity control
 
     //End of DomContentLoaded
     });
@@ -256,16 +303,14 @@ function filterTopWeightedEdges(edges, selectedNodeIds) {
 ///////////////////////////////////
 //Function for Handling Filtered edges////
 
-function fetchAndFilterEdgeData(filePath, selectedNodeIds, callback) {
-    d3.json(filePath).then(rawData => {
-        // Filter edges based on node selection only
-        const filteredEdges = rawData.filter(edge => 
-            selectedNodeIds.includes(String(edge.Source)) || selectedNodeIds.includes(String(edge.Target))
-        );
-        callback(filteredEdges);  // Execute the callback with filtered edges
-    }).catch(error => {
-        console.error("Error fetching and filtering edge data:", error);
-    });
+function fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, callback) {
+    fetch(edgeDataPath)
+        .then(response => response.json())
+        .then(allEdges => {
+            const filteredEdges = allEdges.filter(edge => selectedNodeIds.includes(String(edge.Source)) || selectedNodeIds.includes(String(edge.Target)));
+            callback(filteredEdges);
+        })
+        .catch(error => console.error("Error fetching and filtering edge data:", error));
 }
 
     
@@ -278,13 +323,11 @@ function fetchAndFilterEdgeData(filePath, selectedNodeIds, callback) {
 let maxEdgeWeight = 0;  // Global variable to store the maximum edge weight
 
 function updateEdgeVisibility(value) {
-    const selectedNodeIds = Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked'))
-                                 .map(checkbox => checkbox.dataset.nodeId);
+    const selectedNodeIds = selectedNodeIdsForRange.length > 0 ? selectedNodeIdsForRange : Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked')).map(checkbox => checkbox.dataset.nodeId);
     const selectedDataset = document.getElementById('dataset-selector').value;
     const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed.json' : 'Other_Dataset_Edge.json';
-    const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_3D.json' : 'Other_Dataset_Node_data.json'; // Correctly define nodeDataPath
+    const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_3D.json' : 'Other_Dataset_Node_data.json';
 
-    
     fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, function(filteredEdges) {
         // Calculate the number of edges to show based on the slider percentage
         const numberOfEdgesToShow = Math.ceil(filteredEdges.length * (value / 100));
@@ -307,9 +350,11 @@ function updateEdgeVisibility(value) {
         });
 
         // Update the parallel plot
-        updateParallelPlot(edgeDataPath, selectedNodeIds, numberOfEdgesToShow);  // Assumes this function is adapted to fetch and filter as needed
+        updateParallelPlot(edgeDataPath, selectedNodeIds, numberOfEdgesToShow);
     });
 }
+
+
 
 function updateParallelPlot(edgeDataPath, selectedNodeIds, numberOfEdgesToShow) {
     fetch(edgeDataPath)
@@ -319,25 +364,24 @@ function updateParallelPlot(edgeDataPath, selectedNodeIds, numberOfEdgesToShow) 
             filteredData.sort((a, b) => b.Weight - a.Weight); // Sort by weight descending
             const edgesToShow = filteredData.slice(0, numberOfEdgesToShow); // Take top N edges based on slider
 
-                // If no SVG exists, initialize it
-                const allNodes = {
-                    sources: [...new Set(data.map(d => d.Source))],
-                    targets: [...new Set(data.map(d => d.Target))]
-                };
-                const { svg, sourceScale, targetScale, width, height } = setupSVGandAxes(allNodes);
+            // If no SVG exists, initialize it
+            const allNodes = {
+                sources: [...new Set(data.map(d => d.Source))],
+                targets: [...new Set(data.map(d => d.Target))]
+            };
+            const { svg, sourceScale, targetScale, width, height } = setupSVGandAxes(allNodes);
 
-                drawLinks({ svg, sourceScale, targetScale, data: edgesToShow, width });
-})
+            drawLinks({ svg, sourceScale, targetScale, data: edgesToShow, width });
+        })
         .catch(error => console.error("Error updating parallel plot:", error));
 }
-
 
 
 function clearOnlyEdges2D(context, canvas, nodeData) {
     context.clearRect(0, 0, canvas.width, canvas.height); // Clears the entire canvas
     draw2DVisualization(nodeData); // Redraw only nodes to avoid edge deletion
+    edges2D = []; // Clear the edges2D array
 }
-
 
 function clearEdges3D() {
     // Traverse and remove all lines (edges) from the scene
@@ -348,9 +392,10 @@ function clearEdges3D() {
         }
     });
     toRemove.forEach(object => scene.remove(object));
+    edges3D = []; // Clear the edges3D array
 }
 
-//Function for draw edges of selected nodes for 3d vis////
+// Function for drawing edges of selected nodes for 3D visualization
 function createEdges3D(edgeData) {
     // Use a light grey color (e.g., #CCCCCC) and set transparency
     const lineMaterial = new THREE.LineBasicMaterial({
@@ -368,6 +413,7 @@ function createEdges3D(edgeData) {
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
             const line = new THREE.Line(geometry, lineMaterial);
             scene.add(line);
+            edges3D.push(line);  // Push edge into edges3D array
             console.log(`Drawing edge between ${edge.Source} and ${edge.Target}`);
         } else {
             console.log(`Failed to find nodes for edge between ${edge.Source} and ${edge.Target}`);
@@ -378,11 +424,15 @@ function createEdges3D(edgeData) {
 }
 
 
-
     
 ///////////////////////////////////
-//Function for draw edges of selected nodes for 2d vis////
 
+//For controlling opacity of edges//
+let edges3D = [];
+let edges2D = [];
+//////////////////////////////////////
+
+//Function for draw edges of selected nodes for 2d vis////
 function drawEdges2D(edgeData, context) {
     context.strokeStyle = '#CCCCCC';  // Light grey color for edges
     context.globalAlpha = 0.5;  // 50% opacity for a subtle appearance
@@ -403,6 +453,7 @@ function drawEdges2D(edgeData, context) {
             context.moveTo(sourceNode.x, sourceNode.y);
             context.lineTo(targetNode.x, targetNode.y);
             context.stroke();
+            edges2D.push({ source: sourceNode, target: targetNode });  // Push edge into edges2D array
             console.log(`Edge drawn from ${edge.Source} to ${edge.Target}`);
         } else {
             console.log(`Nodes not found for edge from ${edge.Source} to ${edge.Target}`);
@@ -413,7 +464,6 @@ function drawEdges2D(edgeData, context) {
     context.globalAlpha = 1.0;
     context.shadowBlur = 0;  // Remove shadow after drawing edges
 }
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -460,24 +510,21 @@ function setupAndDrawParallelPlot(dataset, selectedNodeIds) {
 
 // Function to setup and fetch data for the parallel plot
 
-function setupParallelPlotData(filePath) {
-    fetch(filePath)
-        .then(response => response.json())
-        .then(data => {
-            maxEdgeWeight = Math.max(...data.map(d => d.Weight));
-            console.log("Max weight in original data:", maxEdgeWeight);
-
-            const allNodes = {
-                sources: [...new Set(data.map(d => d.Source))],
-                targets: [...new Set(data.map(d => d.Target))]
-            };
-
-            // Make sure to pass 'allNodes' correctly
-            console.log("All Nodes:", allNodes);
-
-            setupSVGandAxes(allNodes); // Now passes 'allNodes'
-        })
-        .catch(error => console.error("Error fetching parallel plot data:", error));
+async function setupParallelPlotData(filePath) {
+    try {
+        console.log("Fetching parallel plot data...");
+        const response = await fetch(filePath);
+        const data = await response.json();
+        console.log("Parallel plot data fetched successfully:", data);
+        maxEdgeWeight = Math.max(...data.map(d => d.Weight));
+        const allNodes = {
+            sources: [...new Set(data.map(d => d.Source))],
+            targets: [...new Set(data.map(d => d.Target))]
+        };
+        setupSVGandAxes(allNodes);
+    } catch (error) {
+        console.error("Error fetching parallel plot data:", error);
+    }
 }
 
 
@@ -611,7 +658,7 @@ legendItems.append("text")
 
 
 
-//Control Opacity Function for Parallel Plot
+//Control Opacity Function for Parallel Plot, 3d and 2d vis
 function addOpacityControl() {
     const slider = document.getElementById('linkOpacitySlider');
     const sliderValue = document.getElementById('linkOpacityValue');
@@ -619,9 +666,34 @@ function addOpacityControl() {
     slider.addEventListener('input', function() {
         const opacity = slider.value / 100;
         sliderValue.textContent = `${slider.value}%`;
+
+        // Update opacity for parallel plot
         d3.selectAll('path').attr('opacity', opacity);
+
+        // Update opacity for 2D edges
+        const canvas = document.getElementById('canvas2D');
+        if (canvas) {
+            const context = canvas.getContext('2d');
+            context.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+            edges2D.forEach(edge => {
+                context.globalAlpha = opacity; // Set new opacity
+                context.beginPath();
+                context.moveTo(edge.source.x, edge.source.y);
+                context.lineTo(edge.target.x, edge.target.y);
+                context.stroke();
+            });
+            context.globalAlpha = 1.0; // Reset to default
+        }
+
+        // Update opacity for 3D edges
+        edges3D.forEach(line => {
+            line.material.opacity = opacity;
+        });
+
+        renderer.render(scene, camera); // Re-render the 3D scene
     });
 }
+
 
 ///////////////////////////////////////////////////////
 function clearVisualizationScenes() {
@@ -792,19 +864,17 @@ function getMin(data, coord) {
 }
 
 //////////////////////////////////////
-function fetchProcessedEdgeData(filePath) {
-    // Fetch and process the edge data for heatmap and other visualizations
-    d3.json(filePath).then(rawData => {
-      // Preprocess data to include both halves for a full heatmap
-      const processedData = preprocessDataForHeatmap(rawData);
-      // Pass the processed data to the function that creates the heatmap
-      createHeatmap(processedData);
-      // If you have other visualizations that use this data, call those functions here too
-    }).catch(error => {
-      console.error("Error fetching processed edge data:", error);
-    });
-  }
-
+async function fetchProcessedEdgeData(filePath) {
+    try {
+        console.log("Fetching processed edge data...");
+        const rawData = await d3.json(filePath);
+        console.log("Edge data fetched successfully:", rawData);
+        const processedData = preprocessDataForHeatmap(rawData);
+        createHeatmap(processedData);
+    } catch (error) {
+        console.error("Error fetching processed edge data:", error);
+    }
+}
   
 function preprocessDataForHeatmap(rawData) {
     // Create a new array that will contain both halves of the matrix
@@ -928,6 +998,10 @@ function createHeatmap(data) {
     // Call the function to draw gene density lines
     drawGeneDensityLines(svg, width, height, margin, xScale, yScale);
 
+    // Store the initial scales for resetting the zoom
+    const initialXScale = xScale.copy();
+    const initialYScale = yScale.copy();
+
     // Set up zoom functionality
     const zoom = d3.zoom()
         .scaleExtent([1, 10])  // Limit zooming between 1x and 10x
@@ -941,8 +1015,8 @@ function createHeatmap(data) {
             if (event.transform.k === 1) {
                 // Reset transformation to initial state when zoom level is at minimum
                 heatmapGroup.attr('transform', `translate(${margin.left},${margin.top})`);
-                xAxisGroup.attr('transform', `translate(${margin.left},${margin.top + height})`);
-                yAxisGroup.attr('transform', `translate(${margin.left},${margin.top})`);
+                xAxisGroup.call(d3.axisBottom(initialXScale).tickFormat(d => `Bin ${d}`));
+                yAxisGroup.call(d3.axisLeft(initialYScale).tickFormat(d => `Bin ${d}`));
             } else {
                 // Apply the zoom transformation
                 heatmapGroup.attr('transform', event.transform);
@@ -953,24 +1027,12 @@ function createHeatmap(data) {
                 const newYScale = event.transform.rescaleY(yScale);
                 xAxisGroup.call(d3.axisBottom(newXScale).tickFormat(d => `Bin ${d}`));
                 yAxisGroup.call(d3.axisLeft(newYScale).tickFormat(d => `Bin ${d}`));
-
-                // Update the gene density lines based on the zoom level
-                //updateGeneDensityLines(svg, width, height, margin, newXScale, event.transform.k);
             }
         });
 
     svg.call(zoom);
+    
 }
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -979,8 +1041,8 @@ function createHeatmap(data) {
 // Set to track selected nodes
 let selectedNodes = new Set();
 
-function updateHeatmapHighlights(svg) {
-    // Define a vibrant stroke color and increased stroke width
+
+function updateHeatmapHighlights(svg, isRangeHighlight = false) {
     const highlightColor = '#ff5722';  // Example: bright orange
     const highlightWidth = 2;  // Stroke width for better visibility
 
@@ -1015,16 +1077,28 @@ function updateHeatmapHighlights(svg) {
         .style("filter", null)
         .style('opacity', 1);  // Reset opacity
 
-    // Reapply highlights for all selected nodes
-    selectedNodes.forEach(nodeId => {
+    if (isRangeHighlight) {
+        const rangeStart = Math.min(...selectedNodeIdsForRange);
+        const rangeEnd = Math.max(...selectedNodeIdsForRange);
+
+        // Highlight the entire rows and columns for rangeStart and rangeEnd
         svg.selectAll('rect')
-            .filter(d => d && (d.Source == nodeId || d.Target == nodeId))
+            .filter(d => d && (d.Source == rangeStart || d.Target == rangeStart || d.Source == rangeEnd || d.Target == rangeEnd))
             .style('stroke', highlightColor)
             .style('stroke-width', highlightWidth)
-            .style("filter", "url(#glow-filter)")  // Apply the glow effect
-            .style('opacity', 0.5);  // Set opacity to make the highlight transparent
-    });
+            .style("filter", "url(#glow-filter)");  // Apply the glow effect
+    } else {
+        selectedNodes.forEach(nodeId => {
+            svg.selectAll('rect')
+                .filter(d => d && (d.Source == nodeId || d.Target == nodeId))
+                .style('stroke', highlightColor)
+                .style('stroke-width', highlightWidth)
+                .style("filter", "url(#glow-filter)")  // Apply the glow effect
+                .style('opacity', 0.1);  // Set opacity to make the highlight transparent
+        });
+    }
 }
+
 
 
 
@@ -1042,55 +1116,51 @@ function updateHeatmapHighlights(svg) {
     //////////////////////////////////////////////////////////////////////////////////
     ////////////            3D Visualization Setup      /////////////////////////////
     // Setup Three.js scene, camera, renderer, and controls
-    scene = new THREE.Scene();
+        scene = new THREE.Scene();
 
-    const visualizationContainer = document.getElementById('visualization1');
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setClearColor(0x000000, 0); // Transparent background
-    renderer.setSize(visualizationContainer.clientWidth, visualizationContainer.clientHeight);
-    console.log("Renderer dimensions:", visualizationContainer.clientWidth, visualizationContainer.clientHeight);
-    visualizationContainer.appendChild(renderer.domElement);
-
-    camera = new THREE.PerspectiveCamera(45, visualizationContainer.clientWidth / visualizationContainer.clientHeight, 0.1, 1000);
-    camera.position.set(0, 0, 50);
-    camera.lookAt(new THREE.Vector3(0, 0, 0));
-    camera.updateProjectionMatrix();
-
-    var ambientLight = new THREE.AmbientLight(0xaaaaaa);
-    scene.add(ambientLight);
-
-    var light = new THREE.PointLight(0xffffff, 1);
-    light.position.set(50, 50, 50);
-    scene.add(light);
-
-    controls = new OrbitControls(camera, renderer.domElement);
-
-//setup2DCanvas();
-
-//////////////////////////////////////////////////////////////////////////////////////
-
-//////////////////////////////////////////////////////////////////////////////////////
-function onWindowResize() {
-    camera.aspect = visualizationContainer.clientWidth / visualizationContainer.clientHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(visualizationContainer.clientWidth, visualizationContainer.clientHeight);
-}
-
-    window.addEventListener('resize', onWindowResize, false);
-    onWindowResize();  // Call initially to set size.
- //////////////////////////////////////////////////////////////////////////////////////   
-
-    // Scene background color
-    scene.background = new THREE.Color(0xf0f0f0);
-//////////////////////////////////////////////////////////////////////////////////////
-
-    // Animation loop
-    function animate() {
-        requestAnimationFrame(animate);
-        controls.update(); // Needed if controls.enableDamping or controls.autoRotate are set to true
-        renderer.render(scene, camera);
-    }
-    animate();
+        const visualizationContainer = document.getElementById('visualization1');
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setClearColor(0x000000, 0); // Transparent background
+        
+        const margin = { top: 10, right: 10, bottom: 30, left: 10 }; // Adjust margin values as needed
+        
+        renderer.setSize(visualizationContainer.clientWidth - margin.left - margin.right, visualizationContainer.clientHeight - margin.top - margin.bottom);
+        console.log("Renderer dimensions:", visualizationContainer.clientWidth - margin.left - margin.right, visualizationContainer.clientHeight - margin.top - margin.bottom);
+        visualizationContainer.appendChild(renderer.domElement);
+        
+        camera = new THREE.PerspectiveCamera(45, (visualizationContainer.clientWidth - margin.left - margin.right) / (visualizationContainer.clientHeight - margin.top - margin.bottom), 0.1, 1000);
+        camera.position.set(0, 0, 100); // Move the camera further away
+        camera.lookAt(new THREE.Vector3(0, 0, 0));
+        camera.updateProjectionMatrix();
+        
+        var ambientLight = new THREE.AmbientLight(0xaaaaaa);
+        scene.add(ambientLight);
+        
+        var light = new THREE.PointLight(0xffffff, 1);
+        light.position.set(50, 50, 50);
+        scene.add(light);
+        
+        controls = new OrbitControls(camera, renderer.domElement);
+        
+        function onWindowResize() {
+            camera.aspect = (visualizationContainer.clientWidth - margin.left - margin.right) / (visualizationContainer.clientHeight - margin.top - margin.bottom);
+            camera.updateProjectionMatrix();
+            renderer.setSize(visualizationContainer.clientWidth - margin.left - margin.right, visualizationContainer.clientHeight - margin.top - margin.bottom);
+        }
+        
+        window.addEventListener('resize', onWindowResize, false);
+        onWindowResize();  // Call initially to set size.
+        
+        scene.background = new THREE.Color(0xf0f0f0);
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); // Needed if controls.enableDamping or controls.autoRotate are set to true
+            renderer.render(scene, camera);
+        }
+        animate();
+    
 
     //For Creating Nodes for 3d Visualization
     function createNodes(nodeData) {
@@ -1220,23 +1290,21 @@ function onWindowResize() {
         }
         
         //// Gene Density Function///
-        function fetchGeneDensityData(filePath) {
-            fetch(filePath)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    // Store the gene density data for later use
-                    window.geneDensityData = data;
-                })
-                .catch(error => {
-                    console.error("Error fetching gene density data:", error);
-                });
+        async function fetchGeneDensityData(filePath) {
+            try {
+                console.log("Fetching gene density data...");
+                const response = await fetch(filePath);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                console.log("Gene density data fetched successfully:", data);
+                window.geneDensityData = data;
+            } catch (error) {
+                console.error("Error fetching gene density data:", error);
+            }
         }
-
+        
         function drawGeneDensityLines(svg, width, height, margin, xScale, yScale) {
             // Ensure gene density data is available
             if (!window.geneDensityData) {
@@ -1405,10 +1473,16 @@ function onWindowResize() {
             nodeCheckboxes.forEach(checkbox => checkbox.checked = false);
         
             // Clear other selections and controls if any
-            // Reset slider value
+            // Reset edge weight slider value
             const edgeWeightSlider = document.getElementById('edgeWeightSlider');
             edgeWeightSlider.value = 100;
             document.getElementById('edgeWeightValue').textContent = '100%';
+        
+            // Reset opacity slider value
+            const linkOpacitySlider = document.getElementById('linkOpacitySlider');
+            linkOpacitySlider.value = 70; // Assuming the initial value is 70%
+            document.getElementById('linkOpacityValue').textContent = '70%';
+            d3.selectAll('path').attr('opacity', 0.7); // Reset the opacity of links
         
             // Reset bin range inputs
             document.getElementById('fromBin').value = '';
@@ -1423,4 +1497,5 @@ function onWindowResize() {
         }
         
         document.getElementById('clear-visualizations').addEventListener('click', clearVisualizations);
+        
         
