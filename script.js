@@ -130,8 +130,39 @@ function addDynamicEventListeners() {
 }
 
 
+/////////////////////////////      For responsive design /////////////////////
+window.addEventListener('resize', () => {
+    // Adjust 3D visualization size
+    renderer.setSize(visualizationContainer.clientWidth, visualizationContainer.clientHeight);
+    camera.aspect = visualizationContainer.clientWidth / visualizationContainer.clientHeight;
+    camera.updateProjectionMatrix();
 
+    // Adjust 2D canvas size
+    const canvas2D = document.getElementById('canvas2D');
+    if (canvas2D) {
+        canvas2D.width = canvas2D.parentElement.clientWidth;
+        canvas2D.height = canvas2D.parentElement.clientHeight;
+    }
 
+    // Adjust heatmap size
+    const heatmapSVG = d3.select('#visualization3 svg');
+    if (!heatmapSVG.empty()) {
+        const container = d3.select('#visualization3');
+        const width = container.node().getBoundingClientRect().width;
+        const height = container.node().getBoundingClientRect().height;
+        heatmapSVG.attr('width', width).attr('height', height);
+    }
+
+    // Adjust parallel plot size
+    const parallelPlotSVG = d3.select('#visualization4 svg');
+    if (!parallelPlotSVG.empty()) {
+        const container = d3.select('#visualization4');
+        const width = container.node().getBoundingClientRect().width;
+        const height = container.node().getBoundingClientRect().height;
+        parallelPlotSVG.attr('width', width).attr('height', height);
+    }
+});
+///////////////////////////////////////
 
 ////////////////////////////////////////////////////////////
 ///////////////////// Start of DOM Content /////////////////
@@ -1199,8 +1230,8 @@ function updateHeatmapHighlights(svg, isRangeHighlight = false) {
                 });
             } else {
                 nodeMaterial = new THREE.MeshStandardMaterial({
-                    color: 0xFF5733, // A vibrant red color for other nodes
-                    emissive: 0xFF5733,
+                    color: 0xFF0000, // Red color for other nodes
+                    emissive: 0xFF0000,
                     emissiveIntensity: 1,
                     roughness: 0.1,
                     metalness: 0.5
