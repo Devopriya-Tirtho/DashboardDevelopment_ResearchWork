@@ -53,75 +53,140 @@ function addDynamicEventListeners() {
     });
 
     // Visualize button functionality
-    document.getElementById('visualize-nodes').addEventListener('click', function() {
-        selectedNodeIdsForRange = []; // Reset the range selection
-    
-        const selectedNodeIds = Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked'))
-                                    .map(checkbox => checkbox.dataset.nodeId);
-        const selectedDataset = document.getElementById('dataset-selector').value;
-        const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed.json' : 'Other_Dataset_Edge.json';
-        
-        fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, function(filteredEdges) {
-            createEdges3D(filteredEdges);  // Draw 3D edges
-            const context = document.getElementById('canvas2D').getContext('2d');
-            drawEdges2D(filteredEdges, context);
-    
-            // Heatmap Visualization
-            selectedNodes.clear();  // Clear the set and add all currently selected nodes
-            selectedNodeIds.forEach(id => selectedNodes.add(id));
-    
-            const svg = d3.select('#visualization3').select('svg');
-            updateHeatmapHighlights(svg, false);  // Pass false to indicate node highlighting
-    
-            // For Parallel Plot
-            setupAndDrawParallelPlot(edgeDataPath, selectedNodeIds);
-        });
+// Visualize button functionality
+document.getElementById('visualize-nodes').addEventListener('click', function() {
+    selectedNodeIdsForRange = []; // Reset the range selection
+
+    // Reset sliders to 100%
+    document.getElementById('edgeWeightSlider').value = 100;
+    document.getElementById('edgeWeightValue').innerText = '100%';
+    document.getElementById('linkOpacitySlider').value = 100;
+    document.getElementById('linkOpacityValue').innerText = '100%';
+
+    const selectedNodeIds = Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked'))
+                                .map(checkbox => checkbox.dataset.nodeId);
+    const selectedDataset = document.getElementById('dataset-selector').value;
+    const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed_with_interaction.json' : 'Other_Dataset_Edge.json';
+
+    // Get interaction filters
+    const interactionFilters = Array.from(document.querySelectorAll('input[name="interaction"]:checked'))
+                                    .map(checkbox => parseInt(checkbox.value));
+
+    fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, interactionFilters, function(filteredEdges) {
+        clearEdges3D();
+        createEdges3D(filteredEdges);  // Draw 3D edges
+        const context = document.getElementById('canvas2D').getContext('2d');
+        drawEdges2D(filteredEdges, context);
+
+        // Heatmap Visualization
+        selectedNodes.clear();  // Clear the set and add all currently selected nodes
+        selectedNodeIds.forEach(id => selectedNodes.add(id));
+
+        const svg = d3.select('#visualization3').select('svg');
+        updateHeatmapHighlights(svg, false);  // Pass false to indicate node highlighting
+
+        // For Parallel Plot
+        setupAndDrawParallelPlot(edgeDataPath, selectedNodeIds);
     });
+});
+
+///For handling the visualize-range option//
+document.getElementById('visualize-range').addEventListener('click', function() {
+    const fromBin = parseInt(document.getElementById('fromBin').value);
+    const toBin = parseInt(document.getElementById('toBin').value);
+
+    if (isNaN(fromBin) || isNaN(toBin) || fromBin > toBin) {
+        alert("Please enter a valid range of bin numbers.");
+        return;
+    }
+
+    // Reset sliders to 100%
+    document.getElementById('edgeWeightSlider').value = 100;
+    document.getElementById('edgeWeightValue').innerText = '100%';
+    document.getElementById('linkOpacitySlider').value = 100;
+    document.getElementById('linkOpacityValue').innerText = '100%';
+
+    selectedNodeIdsForRange = [];
+    for (let i = fromBin; i <= toBin; i++) {
+        selectedNodeIdsForRange.push(i.toString());
+    }
+
+    // Update the heatmap
+    selectedNodes.clear();  // Clear the set and add all currently selected nodes
+    selectedNodeIdsForRange.forEach(id => selectedNodes.add(id));
+
+    const svg = d3.select('#visualization3').select('svg');
+    updateHeatmapHighlights(svg, true);  // Pass true to indicate range highlighting
+
+    // Fetch and filter edges, then update the visualizations
+    const selectedDataset = document.getElementById('dataset-selector').value;
+    const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed_with_interaction.json' : 'Other_Dataset_Edge.json';
+    const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_3D.json' : 'Other_Dataset_Node_data.json';
     
-    ///For handling the visualize-range option//
-    document.getElementById('visualize-range').addEventListener('click', function() {
-        const fromBin = parseInt(document.getElementById('fromBin').value);
-        const toBin = parseInt(document.getElementById('toBin').value);
+    const interactionFilters = Array.from(document.querySelectorAll('input[name="interaction"]:checked'))
+                                .map(checkbox => parseInt(checkbox.value));
+
+    fetchAndFilterEdgeData(edgeDataPath, selectedNodeIdsForRange, interactionFilters, function(filteredEdges) {
+        clearEdges3D();
+        createEdges3D(filteredEdges);
+
+        const canvas = document.getElementById('canvas2D');
+        const context = canvas.getContext('2d');
+        fetch(nodeDataPath).then(response => response.json()).then(nodeData => {
+            clearOnlyEdges2D(context, canvas, nodeData);
+            drawEdges2D(filteredEdges, context);
+        });
+
+        // Update the parallel plot
+        updateParallelPlot(edgeDataPath, selectedNodeIdsForRange, filteredEdges.length);
+    });
+});
+
     
-        if (isNaN(fromBin) || isNaN(toBin) || fromBin > toBin) {
-            alert("Please enter a valid range of bin numbers.");
+
+    document.getElementById('apply-interaction').addEventListener('click', function() {
+        const interactionFilters = Array.from(document.querySelectorAll('input[name="interaction"]:checked'))
+                                    .map(checkbox => parseInt(checkbox.value));
+        
+        if (interactionFilters.length === 0) {
+            alert("Please select at least one interaction type.");
             return;
         }
     
-        selectedNodeIdsForRange = [];
-        for (let i = fromBin; i <= toBin; i++) {
-            selectedNodeIdsForRange.push(i.toString());
-        }
-    
-        // Update the heatmap
-        selectedNodes.clear();  // Clear the set and add all currently selected nodes
-        selectedNodeIdsForRange.forEach(id => selectedNodes.add(id));
-    
-        const svg = d3.select('#visualization3').select('svg');
-        updateHeatmapHighlights(svg, true);  // Pass true to indicate range highlighting
-    
-        // Fetch and filter edges, then update the visualizations
         const selectedDataset = document.getElementById('dataset-selector').value;
-        const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed.json' : 'Other_Dataset_Edge.json';
-        const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_3D.json' : 'Other_Dataset_Node_data.json';
+        const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed_with_interaction.json' : 'Other_Dataset_Edge.json';
+        const selectedNodeIds = selectedNodeIdsForRange.length > 0 ? selectedNodeIdsForRange : Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked')).map(checkbox => checkbox.dataset.nodeId);
     
-        fetchAndFilterEdgeData(edgeDataPath, selectedNodeIdsForRange, function(filteredEdges) {
+        fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, interactionFilters, function(filteredEdges) {
+            const edgeWeightSlider = document.getElementById('edgeWeightSlider');
+            const value = edgeWeightSlider.value;
+    
+            // Calculate the number of edges to show based on the slider percentage
+            const numberOfEdgesToShow = Math.ceil(filteredEdges.length * (value / 100));
+            document.getElementById('edgeWeightValue').innerText = `${value}% (${numberOfEdgesToShow} edges)`;
+            console.log(`Slider value: ${value}% - Showing top ${numberOfEdgesToShow} weighted edges.`);
+    
+            // Sort edges by weight in descending order and take the top N based on the slider
+            filteredEdges.sort((a, b) => b.Weight - a.Weight);
+            const edgesToShow = filteredEdges.slice(0, numberOfEdgesToShow);
+            console.log(`Edges to show after filtering: ${edgesToShow.length}`);
+    
             clearEdges3D();
-            createEdges3D(filteredEdges);
+            createEdges3D(edgesToShow);
     
             const canvas = document.getElementById('canvas2D');
             const context = canvas.getContext('2d');
             fetch(nodeDataPath).then(response => response.json()).then(nodeData => {
                 clearOnlyEdges2D(context, canvas, nodeData);
-                drawEdges2D(filteredEdges, context);
+                drawEdges2D(edgesToShow, context);
             });
     
             // Update the parallel plot
-            updateParallelPlot(edgeDataPath, selectedNodeIdsForRange, filteredEdges.length);
+            updateParallelPlot(edgeDataPath, selectedNodeIds, numberOfEdgesToShow);
         });
     });
     
-
+    
     
     
     
@@ -193,8 +258,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     case 'WT_BS':
                         clearVisualizationScenes(); // Clears all scenes
                         await fetchNodesFromJson('WT_BS_Node_3D.json'); // Specific for 3D visualizations
-                        await fetchProcessedEdgeData('WT_BS_Edge_processed.json');
-                        await setupParallelPlotData('WT_BS_Edge_processed.json'); // Parallel plot specific data
+                        await fetchProcessedEdgeData('WT_BS_Edge_processed_with_interaction.json');
+                        await setupParallelPlotData('WT_BS_Edge_processed_with_interaction.json'); // Parallel plot specific data
                         break;
                     // case 'Other_Dataset': // Example of another dataset
                     //     clearVisualizationScenes();
@@ -334,15 +399,20 @@ function filterTopWeightedEdges(edges, selectedNodeIds) {
 ///////////////////////////////////
 //Function for Handling Filtered edges////
 
-function fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, callback) {
+function fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, interactionFilters, callback) {
     fetch(edgeDataPath)
         .then(response => response.json())
         .then(allEdges => {
-            const filteredEdges = allEdges.filter(edge => selectedNodeIds.includes(String(edge.Source)) || selectedNodeIds.includes(String(edge.Target)));
+            // Filter edges based on selected nodes and interaction types
+            let filteredEdges = allEdges.filter(edge => 
+                (selectedNodeIds.includes(String(edge.Source)) || selectedNodeIds.includes(String(edge.Target))) &&
+                (interactionFilters.length === 0 || interactionFilters.includes(edge.Interaction))
+            );
             callback(filteredEdges);
         })
         .catch(error => console.error("Error fetching and filtering edge data:", error));
 }
+
 
     
 ////////////////////////////////////////////////////////////
@@ -356,10 +426,13 @@ let maxEdgeWeight = 0;  // Global variable to store the maximum edge weight
 function updateEdgeVisibility(value) {
     const selectedNodeIds = selectedNodeIdsForRange.length > 0 ? selectedNodeIdsForRange : Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked')).map(checkbox => checkbox.dataset.nodeId);
     const selectedDataset = document.getElementById('dataset-selector').value;
-    const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed.json' : 'Other_Dataset_Edge.json';
+    const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed_with_interaction.json' : 'Other_Dataset_Edge.json';
     const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_3D.json' : 'Other_Dataset_Node_data.json';
 
-    fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, function(filteredEdges) {
+    const interactionFilters = Array.from(document.querySelectorAll('input[name="interaction"]:checked'))
+                                .map(checkbox => parseInt(checkbox.value));
+
+    fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, interactionFilters, function(filteredEdges) {
         // Calculate the number of edges to show based on the slider percentage
         const numberOfEdgesToShow = Math.ceil(filteredEdges.length * (value / 100));
         document.getElementById('edgeWeightValue').innerText = `${value}% (${numberOfEdgesToShow} edges)`;
@@ -384,6 +457,8 @@ function updateEdgeVisibility(value) {
         updateParallelPlot(edgeDataPath, selectedNodeIds, numberOfEdgesToShow);
     });
 }
+
+
 
 
 

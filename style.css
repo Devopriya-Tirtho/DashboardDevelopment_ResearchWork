@@ -203,7 +203,19 @@ header {
 }
 
 
+.interaction-option {
+    display: flex;
+    align-items: center;  /* Align items in the center vertically */
+}
 
+.interaction-option label {
+    margin-left: 8px;  /* Space between checkbox and label */
+    color: #fff;  /* White color for labels */
+}
+
+.option-block input[type="checkbox"] {
+    accent-color: #333; /* This changes the checkbox color */
+}
 /* CSS for Canvas Boxes (Main Dashboard's Visualization Part) */
 #vis-container {
     display: grid;
