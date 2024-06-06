@@ -144,47 +144,52 @@ document.getElementById('visualize-range').addEventListener('click', function() 
 
     
 
-    document.getElementById('apply-interaction').addEventListener('click', function() {
-        const interactionFilters = Array.from(document.querySelectorAll('input[name="interaction"]:checked'))
-                                    .map(checkbox => parseInt(checkbox.value));
-        
-        if (interactionFilters.length === 0) {
-            alert("Please select at least one interaction type.");
-            return;
-        }
+document.getElementById('apply-interaction').addEventListener('click', function() {
+    const interactionFilters = Array.from(document.querySelectorAll('input[name="interaction"]:checked'))
+                                .map(checkbox => parseInt(checkbox.value));
     
-        const selectedDataset = document.getElementById('dataset-selector').value;
-        const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed_with_interaction.json' : 'Other_Dataset_Edge.json';
-        const selectedNodeIds = selectedNodeIdsForRange.length > 0 ? selectedNodeIdsForRange : Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked')).map(checkbox => checkbox.dataset.nodeId);
-    
-        fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, interactionFilters, function(filteredEdges) {
-            const edgeWeightSlider = document.getElementById('edgeWeightSlider');
-            const value = edgeWeightSlider.value;
-    
-            // Calculate the number of edges to show based on the slider percentage
-            const numberOfEdgesToShow = Math.ceil(filteredEdges.length * (value / 100));
-            document.getElementById('edgeWeightValue').innerText = `${value}% (${numberOfEdgesToShow} edges)`;
-            console.log(`Slider value: ${value}% - Showing top ${numberOfEdgesToShow} weighted edges.`);
-    
-            // Sort edges by weight in descending order and take the top N based on the slider
-            filteredEdges.sort((a, b) => b.Weight - a.Weight);
-            const edgesToShow = filteredEdges.slice(0, numberOfEdgesToShow);
-            console.log(`Edges to show after filtering: ${edgesToShow.length}`);
-    
-            clearEdges3D();
-            createEdges3D(edgesToShow);
-    
-            const canvas = document.getElementById('canvas2D');
-            const context = canvas.getContext('2d');
-            fetch(nodeDataPath).then(response => response.json()).then(nodeData => {
-                clearOnlyEdges2D(context, canvas, nodeData);
-                drawEdges2D(edgesToShow, context);
-            });
-    
-            // Update the parallel plot
-            updateParallelPlot(edgeDataPath, selectedNodeIds, numberOfEdgesToShow);
+    if (interactionFilters.length === 0) {
+        alert("Please select at least one interaction type.");
+        return;
+    }
+
+    const selectedDataset = document.getElementById('dataset-selector').value;
+    const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed_with_interaction.json' : 'Other_Dataset_Edge.json';
+    const selectedNodeIds = selectedNodeIdsForRange.length > 0 ? selectedNodeIdsForRange : Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked')).map(checkbox => checkbox.dataset.nodeId);
+    const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_3D.json' : 'Other_Dataset_Node_data.json';
+
+    fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, interactionFilters, function(filteredEdges) {
+        const edgeWeightSlider = document.getElementById('edgeWeightSlider');
+        const value = edgeWeightSlider.value;
+
+        // Calculate the number of edges to show based on the slider percentage
+        const numberOfEdgesToShow = Math.ceil(filteredEdges.length * (value / 100));
+        document.getElementById('edgeWeightValue').innerText = `${value}% (${numberOfEdgesToShow} edges)`;
+        console.log(`Slider value: ${value}% - Showing top ${numberOfEdgesToShow} weighted edges.`);
+
+        // Sort edges by weight in descending order and take the top N based on the slider
+        filteredEdges.sort((a, b) => b.Weight - a.Weight);
+        const edgesToShow = filteredEdges.slice(0, numberOfEdgesToShow);
+        console.log(`Edges to show after filtering: ${edgesToShow.length}`);
+
+        // Clear and update 3D edges
+        clearEdges3D();
+        createEdges3D(edgesToShow);
+
+        // Clear and update 2D edges
+        const canvas = document.getElementById('canvas2D');
+        const context = canvas.getContext('2d');
+        fetch(nodeDataPath).then(response => response.json()).then(nodeData => {
+            clearOnlyEdges2D(context, canvas, nodeData);
+            drawEdges2D(edgesToShow, context);
         });
+
+        // Update the parallel plot
+        updateParallelPlot(edgeDataPath, selectedNodeIds, numberOfEdgesToShow);
     });
+});
+
+
     
     
     
@@ -403,15 +408,15 @@ function fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, interactionFilter
     fetch(edgeDataPath)
         .then(response => response.json())
         .then(allEdges => {
-            // Filter edges based on selected nodes and interaction types
-            let filteredEdges = allEdges.filter(edge => 
-                (selectedNodeIds.includes(String(edge.Source)) || selectedNodeIds.includes(String(edge.Target))) &&
-                (interactionFilters.length === 0 || interactionFilters.includes(edge.Interaction))
-            );
+            let filteredEdges = allEdges.filter(edge => selectedNodeIds.includes(String(edge.Source)) || selectedNodeIds.includes(String(edge.Target)));
+            if (interactionFilters && interactionFilters.length > 0) {
+                filteredEdges = filteredEdges.filter(edge => interactionFilters.includes(edge.Interaction));
+            }
             callback(filteredEdges);
         })
         .catch(error => console.error("Error fetching and filtering edge data:", error));
 }
+
 
 
     
@@ -462,6 +467,7 @@ function updateEdgeVisibility(value) {
 
 
 
+
 function updateParallelPlot(edgeDataPath, selectedNodeIds, numberOfEdgesToShow) {
     fetch(edgeDataPath)
         .then(response => response.json())
@@ -483,11 +489,6 @@ function updateParallelPlot(edgeDataPath, selectedNodeIds, numberOfEdgesToShow) 
 }
 
 
-function clearOnlyEdges2D(context, canvas, nodeData) {
-    context.clearRect(0, 0, canvas.width, canvas.height); // Clears the entire canvas
-    draw2DVisualization(nodeData); // Redraw only nodes to avoid edge deletion
-    edges2D = []; // Clear the edges2D array
-}
 
 function clearEdges3D() {
     // Traverse and remove all lines (edges) from the scene
@@ -539,6 +540,8 @@ let edges2D = [];
 //////////////////////////////////////
 
 //Function for draw edges of selected nodes for 2d vis////
+
+
 function drawEdges2D(edgeData, context) {
     context.strokeStyle = '#CCCCCC';  // Light grey color for edges
     context.globalAlpha = 0.5;  // 50% opacity for a subtle appearance
@@ -549,6 +552,8 @@ function drawEdges2D(edgeData, context) {
     // Setting shadow for a glow effect
     context.shadowColor = '#CCCCCC';
     context.shadowBlur = 10;  // Adjust the blur level for more or less glow
+
+    edges2D = []; // Clear the edges2D array before drawing
 
     edgeData.forEach(edge => {
         const sourceNode = nodePositions[edge.Source];
@@ -569,6 +574,12 @@ function drawEdges2D(edgeData, context) {
     // Resetting context properties after drawing
     context.globalAlpha = 1.0;
     context.shadowBlur = 0;  // Remove shadow after drawing edges
+}
+
+function clearOnlyEdges2D(context, canvas, nodeData) {
+    context.clearRect(0, 0, canvas.width, canvas.height); // Clears the entire canvas
+    draw2DVisualization(nodeData); // Redraw only nodes to avoid edge deletion
+    edges2D = []; // Clear the edges2D array
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -780,7 +791,7 @@ function addOpacityControl() {
         const canvas = document.getElementById('canvas2D');
         if (canvas) {
             const context = canvas.getContext('2d');
-            context.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+            //context.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
             edges2D.forEach(edge => {
                 context.globalAlpha = opacity; // Set new opacity
                 context.beginPath();
@@ -917,7 +928,7 @@ function draw2DVisualization(data) {
         const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
         let foundNode = false;
 
-        context.clearRect(0, 0, canvas.width, canvas.height); // Clear and redraw for hover effects
+        //context.clearRect(0, 0, canvas.width, canvas.height); // Clear and redraw for hover effects
         data.forEach(node => {
             const numericId = node.id.replace(/[^\d]/g, '');
             const x = nodePositions[numericId].x;
@@ -1586,9 +1597,9 @@ function updateHeatmapHighlights(svg, isRangeHighlight = false) {
         
             // Reset opacity slider value
             const linkOpacitySlider = document.getElementById('linkOpacitySlider');
-            linkOpacitySlider.value = 70; // Assuming the initial value is 70%
-            document.getElementById('linkOpacityValue').textContent = '70%';
-            d3.selectAll('path').attr('opacity', 0.7); // Reset the opacity of links
+            linkOpacitySlider.value = 100; // Assuming the initial value is 70%
+            document.getElementById('linkOpacityValue').textContent = '100%';
+            d3.selectAll('path').attr('opacity', 1.0); // Reset the opacity of links
         
             // Reset bin range inputs
             document.getElementById('fromBin').value = '';
