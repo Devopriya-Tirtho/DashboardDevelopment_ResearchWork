@@ -156,7 +156,7 @@ document.getElementById('apply-interaction').addEventListener('click', function(
     const selectedDataset = document.getElementById('dataset-selector').value;
     const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed_with_interaction.json' : 'Other_Dataset_Edge.json';
     const selectedNodeIds = selectedNodeIdsForRange.length > 0 ? selectedNodeIdsForRange : Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked')).map(checkbox => checkbox.dataset.nodeId);
-    const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_3D.json' : 'Other_Dataset_Node_data.json';
+    const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_2D.json' : 'Other_Dataset_Node_data.json';
 
     fetchAndFilterEdgeData(edgeDataPath, selectedNodeIds, interactionFilters, function(filteredEdges) {
         const edgeWeightSlider = document.getElementById('edgeWeightSlider');
@@ -263,6 +263,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     case 'WT_BS':
                         clearVisualizationScenes(); // Clears all scenes
                         await fetchNodesFromJson('WT_BS_Node_3D.json'); // Specific for 3D visualizations
+                        await fetchNodesFromJson2D('WT_BS_Node_2D.json'); // Specific for 2D visualizations
                         await fetchProcessedEdgeData('WT_BS_Edge_processed_with_interaction.json');
                         await setupParallelPlotData('WT_BS_Edge_processed_with_interaction.json'); // Parallel plot specific data
                         break;
@@ -289,7 +290,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-
+    // For Fetching data for 3d Vis
     async function fetchNodesFromJson(filePath) {
         try {
             console.log("Fetching nodes from JSON...");
@@ -301,12 +302,29 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log("Nodes data fetched successfully:", data);
             updateNodeDropdown(data); // Update the dropdown with the new data
             createNodes(data); // For 3D visualization
-            draw2DVisualization(data); // For 2D visualization
+            //draw2DVisualization(data); // For 2D visualization
         } catch (error) {
             console.error("Error fetching nodes:", error);
         }
     }
 
+    // For Fetching data for 2d Vis
+    async function fetchNodesFromJson2D(filePath) {
+        try {
+            console.log("Fetching nodes from JSON...");
+            const response = await fetch(filePath);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            console.log("Nodes data fetched successfully:", data);
+            //updateNodeDropdown(data); // Update the dropdown with the new data
+            //createNodes(data); // For 3D visualization
+            draw2DVisualization(data); // For 2D visualization
+        } catch (error) {
+            console.error("Error fetching nodes:", error);
+        }
+    }
 
     // For Clicking in 3d Vis
     console.log("Adding event listener to", renderer.domElement);
@@ -432,7 +450,7 @@ function updateEdgeVisibility(value) {
     const selectedNodeIds = selectedNodeIdsForRange.length > 0 ? selectedNodeIdsForRange : Array.from(document.querySelectorAll('#node-checkboxes input[type="checkbox"]:checked')).map(checkbox => checkbox.dataset.nodeId);
     const selectedDataset = document.getElementById('dataset-selector').value;
     const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed_with_interaction.json' : 'Other_Dataset_Edge.json';
-    const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_3D.json' : 'Other_Dataset_Node_data.json';
+    const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_2D.json' : 'Other_Dataset_Node_data.json';
 
     const interactionFilters = Array.from(document.querySelectorAll('input[name="interaction"]:checked'))
                                 .map(checkbox => parseInt(checkbox.value));
@@ -1588,7 +1606,12 @@ function updateHeatmapHighlights(svg, isRangeHighlight = false) {
             // Reset node checkboxes
             const nodeCheckboxes = document.querySelectorAll('#node-checkboxes input[type="checkbox"]');
             nodeCheckboxes.forEach(checkbox => checkbox.checked = false);
-        
+
+            //Disselect for interaction checkboxes
+            const interactionCheckboxes = document.querySelectorAll('input[name="interaction"]');
+            interactionCheckboxes.forEach(checkbox => checkbox.checked = false);
+
+
             // Clear other selections and controls if any
             // Reset edge weight slider value
             const edgeWeightSlider = document.getElementById('edgeWeightSlider');
