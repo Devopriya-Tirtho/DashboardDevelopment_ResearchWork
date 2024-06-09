@@ -250,45 +250,51 @@ document.addEventListener('DOMContentLoaded', function() {
  
 //////////////////////////////////////////////////////////////////////////////////////
 
-    const datasetSelector = document.getElementById('dataset-selector');
-    datasetSelector.addEventListener('change', function() {
-        const selectedDataset = datasetSelector.value;
+        const datasetSelector = document.getElementById('dataset-selector');
+        datasetSelector.addEventListener('change', function() {
+            const selectedDataset = datasetSelector.value;
 
-        // Show loading spinner
-        document.getElementById('loadingSpinner').style.display = 'block';
+            if (selectedDataset === 'WT_BS') {
+                // Show loading spinner and placeholders
+                document.getElementById('loadingSpinner').style.display = 'block';
+                document.getElementById('placeholder1').style.display = 'block';
+                document.getElementById('placeholder2').style.display = 'block';
+                document.getElementById('placeholder3').style.display = 'block';
+                document.getElementById('placeholder4').style.display = 'block';
 
-        const fetchData = async () => {
-            try {
-                switch (selectedDataset) {
-                    case 'WT_BS':
+                const fetchData = async () => {
+                    try {
                         clearVisualizationScenes(); // Clears all scenes
                         await fetchNodesFromJson('WT_BS_Node_3D.json'); // Specific for 3D visualizations
                         await fetchNodesFromJson2D('WT_BS_Node_2D.json'); // Specific for 2D visualizations
                         await fetchProcessedEdgeData('WT_BS_Edge_processed_with_interaction.json');
                         await setupParallelPlotData('WT_BS_Edge_processed_with_interaction.json'); // Parallel plot specific data
-                        break;
-                    // case 'Other_Dataset': // Example of another dataset
-                    //     clearVisualizationScenes();
-                    //     await fetchNodesFromJson('Other_Dataset_Node_3D.json');
-                    //     await setupParallelPlotData('Other_Dataset_Edge_processed.json');
-                    //     break;
-                    // Add more cases as needed
-                }
-            } catch (error) {
-                console.error("Error loading data:", error);
-            } finally {
-                // Hide loading spinner
-                document.getElementById('loadingSpinner').style.display = 'none';
+                    } catch (error) {
+                        console.error("Error loading data:", error);
+                    } finally {
+                        // Hide loading spinner and placeholders
+                        document.getElementById('loadingSpinner').style.display = 'none';
+                        document.getElementById('placeholder1').style.display = 'none';
+                        document.getElementById('placeholder2').style.display = 'none';
+                        document.getElementById('placeholder3').style.display = 'none';
+                        document.getElementById('placeholder4').style.display = 'none';
+                    }
+                };
+
+                fetchData();
+
+                // Fetch gene density data separately
+                fetchGeneDensityData('WT_BS_gene_density.json');
+            } else {
+                // Clear existing visualizations and hide placeholders
+                clearVisualizationScenes();
+                document.getElementById('placeholder1').style.display = 'none';
+                document.getElementById('placeholder2').style.display = 'none';
+                document.getElementById('placeholder3').style.display = 'none';
+                document.getElementById('placeholder4').style.display = 'none';
             }
-        };
+        });
 
-        fetchData();
-
-        // Fetch gene density data separately
-        if (selectedDataset === 'WT_BS') {
-            fetchGeneDensityData('WT_BS_gene_density.json');
-        }
-    });
 
     // For Fetching data for 3d Vis
     async function fetchNodesFromJson(filePath) {
@@ -646,6 +652,8 @@ function setupAndDrawParallelPlot(dataset, selectedNodeIds) {
 // Function to setup and fetch data for the parallel plot
 
 async function setupParallelPlotData(filePath) {
+    //To cancel out the existing still picture so that the actual visualization comes up
+    document.getElementById('placeholder4').style.display = 'none';
     try {
         console.log("Fetching parallel plot data...");
         const response = await fetch(filePath);

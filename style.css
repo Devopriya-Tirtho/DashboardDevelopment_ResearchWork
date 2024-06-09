@@ -360,3 +360,8 @@ canvas {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+/* Initially loading still images at the visualization placeholders */
+#placeholder1, #placeholder2, #placeholder3, #placeholder4 {
+    display: none;
+}
