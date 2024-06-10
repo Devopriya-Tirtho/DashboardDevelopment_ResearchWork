@@ -121,7 +121,7 @@ document.getElementById('visualize-range').addEventListener('click', function() 
     // Fetch and filter edges, then update the visualizations
     const selectedDataset = document.getElementById('dataset-selector').value;
     const edgeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Edge_processed_with_interaction.json' : 'Other_Dataset_Edge.json';
-    const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_3D.json' : 'Other_Dataset_Node_data.json';
+    const nodeDataPath = selectedDataset === 'WT_BS' ? 'WT_BS_Node_2D.json' : 'Other_Dataset_Node_data.json';
     
     const interactionFilters = Array.from(document.querySelectorAll('input[name="interaction"]:checked'))
                                 .map(checkbox => parseInt(checkbox.value));
