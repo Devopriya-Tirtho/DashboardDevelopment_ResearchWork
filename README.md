@@ -1,4 +1,4 @@
-# Visualization Dashboard for Bacillus Subtilis Data
+# Visualization Dashboard for HiC Data
 
 ## Overview
 
