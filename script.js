@@ -144,7 +144,7 @@ document.getElementById('visualize-range').addEventListener('click', function() 
 });
 
     
-
+//Button for implementation of inter/intra interaction filtering for visualized edges
 document.getElementById('apply-interaction').addEventListener('click', function() {
     const interactionFilters = Array.from(document.querySelectorAll('input[name="interaction"]:checked'))
                                 .map(checkbox => parseInt(checkbox.value));
@@ -190,18 +190,12 @@ document.getElementById('apply-interaction').addEventListener('click', function(
     });
 });
 
-
-    
-    
-    
-    
-    
     
     
 }
 
 
-/////////////////////////////      For responsive design /////////////////////
+/////////////////////////////      For responsive design      /////////////////////
 window.addEventListener('resize', () => {
     // Adjust 3D visualization size
     renderer.setSize(visualizationContainer.clientWidth, visualizationContainer.clientHeight);
