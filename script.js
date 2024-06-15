@@ -339,6 +339,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
     ///////////////////////////////
+    /// This function updates the dropdown menu filling with the nodes or bins available in the dataset ///
     
     function updateNodeDropdown(nodes) {
         const nodeCheckboxesContainer = document.getElementById('node-checkboxes');
@@ -486,6 +487,7 @@ function updateEdgeVisibility(value) {
 
 
 
+// Function for updating the parallel plot ///
 
 function updateParallelPlot(edgeDataPath, selectedNodeIds, numberOfEdgesToShow) {
     fetch(edgeDataPath)
