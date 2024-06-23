@@ -1122,18 +1122,7 @@ function createHeatmap(data) {
         .attr('width', width / maxDataValue) // Set width to gridSizeX
         .attr('height', height / maxDataValue) // Set height to gridSizeY
         .style('fill', d => colorScale(d.Weight))
-        .style('stroke-width', 0) // No stroke for a seamless appearance
-        .on('mouseover', function(e, d) {
-            tooltip.style('display', 'block');
-            tooltip.html(`Source: ${d.Source}<br>Target: ${d.Target}<br>Weight: ${d.Weight.toFixed(6)}`);
-        })
-        .on('mousemove', function(e) {
-            tooltip.style('left', (e.pageX + 10) + 'px')
-                .style('top', (e.pageY - 20) + 'px');
-        })
-        .on('mouseout', function() {
-            tooltip.style('display', 'none');
-        });
+        .style('stroke-width', 0); // No stroke for a seamless appearance
 
     // Call the function to draw gene density lines
     drawGeneDensityLines(svg, width, height, margin, xScale, yScale);
@@ -1171,8 +1160,63 @@ function createHeatmap(data) {
         });
 
     svg.call(zoom);
-    
+
+    // Define brush for rectangle selection
+    const brush = d3.brush()
+        .extent([[0, 0], [width, height]])
+        .on('start', brushStart)
+        .on('brush', brushing)
+        .on('end', brushEnd);
+
+    svg.append("g")
+        .attr("class", "brush")
+        .attr('transform', `translate(${margin.left},${margin.top})`) // Adjust brush position
+        .call(brush);
+
+    function brushStart(event) {
+        if (event.sourceEvent.type !== 'end') {
+            d3.selectAll('.selection').style('display', 'block');
+            tooltip.style('display', 'none'); // Hide tooltip when brush starts
+        }
+    }
+
+    function brushing(event) {
+        const selection = event.selection;
+        if (selection) {
+            const [[x0, y0], [x1, y1]] = selection;
+            const selectedSources = data.filter(d => xScale(d.Source) >= x0 && xScale(d.Source) <= x1);
+            const selectedTargets = data.filter(d => yScale(d.Target) >= y0 && yScale(d.Target) <= y1);
+            const minSource = d3.min(selectedSources, d => d.Source);
+            const maxSource = d3.max(selectedSources, d => d.Source);
+            const minTarget = d3.min(selectedTargets, d => d.Target);
+            const maxTarget = d3.max(selectedTargets, d => d.Target);
+
+            // Calculate the average weight for the selected range
+            const selectedWeights = data.filter(d => xScale(d.Source) >= x0 && xScale(d.Source) <= x1 && yScale(d.Target) >= y0 && yScale(d.Target) <= y1)
+                                        .map(d => d.Weight);
+            const avgWeight = d3.mean(selectedWeights);
+
+            tooltip.style('display', 'block')
+                .style('left', `${x1 + margin.left + 10}px`)
+                .style('top', `${y1 + margin.top + 10}px`)
+                .html(`Source: Bin ${minSource} - Bin ${maxSource}<br>Target: Bin ${minTarget} - Bin ${maxTarget}<br>Average Weight: ${avgWeight.toFixed(6)}`);
+        }
+    }
+
+    function brushEnd(event) {
+        if (!event.selection) {
+            tooltip.style('display', 'none');
+        }
+        d3.selectAll('.selection').style('display', 'none');
+    }
 }
+
+
+
+
+
+
+
 
 
 
